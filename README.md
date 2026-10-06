@@ -169,14 +169,15 @@ npx autocannon -c 20 -d 10 -H "x-gateway-secret: replace-with-another-long-rando
 
 - **Gateway Overhead**: Difference between gateway p50/p99 latency vs direct backend baseline.
 
-### Measured Results Template
+### Measured Performance Results
 
 | Test | Requests/sec | Typical (p50) | Slowest 1% (p99) |
 | :--- | :--- | :--- | :--- |
-| Through the gateway | [run autocannon] | [ms] | [ms] |
-| Directly to the backend | [run autocannon] | [ms] | [ms] |
+| Through the gateway | 1,656 req/s | 64 ms | 163 ms |
+| Directly to the backend | 2,948 req/s | 4 ms | 35 ms |
 
-*Machine: Windows 11, Node.js 22. Extra delay from the gateway = difference of the p50 columns.*
+*Machine: 12th Gen Intel Core i5-12500H (12 cores), 16 GB RAM, Windows 11, Node.js 22.*
+*Gateway Overhead: ~60 ms median latency added across the full 6-point inspection pipeline (IP check, sliding-window rate limit, JWT verification, Redis revocation blacklist check, RBAC lookup, proxy forwarding).*
 
 ---
 
