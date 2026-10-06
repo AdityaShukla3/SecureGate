@@ -1,0 +1,41 @@
+{
+  "name": "securegate",
+  "version": "1.0.0",
+  "description": "SecureGate: Standalone reverse-proxy API security gateway",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "init": "node src/db/init.js",
+    "svc:logs": "node services/dummy.js logs 4001",
+    "svc:inv": "node services/dummy.js inventory 4002",
+    "test": "jest --runInBand --forceExit"
+  },
+  "keywords": [
+    "api-gateway",
+    "security",
+    "jwt",
+    "rbac",
+    "rate-limiting",
+    "reverse-proxy"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.5",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
+    "http-proxy-middleware": "^3.0.7",
+    "ioredis": "^6.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.23.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "jest": "^30.5.2",
+    "nodemon": "^3.1.14",
+    "supertest": "^7.3.1"
+  }
+}

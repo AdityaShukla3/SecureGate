@@ -1,0 +1,42 @@
+name: ci
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: securegate
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+
+      redis:
+        image: redis:7
+        ports:
+          - "6379:6379"
+
+    env:
+      DATABASE_URL: postgres://postgres:pass@localhost:5432/securegate
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-secret-test-key-long-enough-32-chars
+      GATEWAY_SECRET: ci-gateway-secret-long-enough-32-chars
+      LOGS_URL: http://localhost:4001
+      INVENTORY_URL: http://localhost:4002
+      TRUST_PROXY: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run init
+      - run: npm test
