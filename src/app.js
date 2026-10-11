@@ -5,6 +5,7 @@ const cors = require('cors');
 const db = require('./config/db');
 const redis = require('./config/redis');
 const routes = require('./config/routes');
+const path = require('path');
 const ipBlock = require('./middleware/ipBlock');
 const rateLimit = require('./middleware/rateLimit');
 const auth = require('./middleware/auth');
@@ -13,6 +14,10 @@ const makeProxy = require('./middleware/proxy');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
+
+// Serve the console static UI
+app.use('/ui', express.static(path.join(__dirname, '../public')));
+app.get('/', (req, res) => res.redirect('/ui/'));
 
 // Only trust X-Forwarded-For when really behind Nginx/a platform proxy, or clients can fake their IP.
 if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY));

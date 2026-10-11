@@ -41,6 +41,13 @@ router.delete('/ips/:ip', requirePermission('ips:manage'), async (req, res) => {
   res.json({ unblocked: req.params.ip });
 });
 
+router.get('/ips', requirePermission('ips:manage'), async (req, res) => {
+  const { rows } = await db.query(
+    'SELECT ip, reason, created_at FROM blocked_ips ORDER BY created_at DESC'
+  );
+  res.json(rows);
+});
+
 router.patch('/users/:id/role', requirePermission('users:manage'), async (req, res) => {
   const { role } = z.object({ role: z.enum(['viewer', 'analyst', 'admin']) }).parse(req.body);
   const r = await db.query(

@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SecureGate Console</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <!-- Global Top Header -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-shield" aria-hidden="true">&#9632;</div>
+      <h1 class="brand-title">SecureGate <span class="brand-sub">Console</span></h1>
+    </div>
+
+    <div class="header-status">
+      <div class="health-indicators" aria-label="Gateway dependencies health">
+        <span id="db-health" class="health-pill down" aria-live="polite">DB checking...</span>
+        <span id="redis-health" class="health-pill down" aria-live="polite">Redis checking...</span>
+      </div>
+
+      <div id="user-chip" class="user-chip hidden" aria-label="Current user session">
+        <span id="user-email-badge" class="user-email"></span>
+        <span id="user-role-badge" class="badge"></span>
+        <button id="header-logout-btn" class="btn btn-ghost btn-sm" type="button">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <!-- Logged-Out Screen -->
+    <section id="logged-out-view" class="view-section">
+      <div class="landing-grid">
+        <!-- Left: Overview & 6-step diagram -->
+        <div class="landing-hero card">
+          <h2>API Gateway Security Perimeter</h2>
+          <p class="hero-desc">
+            A standalone reverse-proxy security gateway defending backend microservices with centralized authentication, rate limiting, and RBAC.
+          </p>
+
+          <h3 class="section-subtitle">Request Processing Pipeline</h3>
+          <ol class="pipeline-diagram static-pipeline" aria-label="Gateway inspection pipeline">
+            <li class="pipe-step">
+              <span class="step-num">1</span>
+              <div class="step-info">
+                <strong>IP Blocklist</strong>
+                <small>Redis manual & auto block</small>
+              </div>
+            </li>
+            <li class="pipe-step">
+              <span class="step-num">2</span>
+              <div class="step-info">
+                <strong>Rate Limit</strong>
+                <small>Sliding window counter</small>
+              </div>
+            </li>
+            <li class="pipe-step">
+              <span class="step-num">3</span>
+              <div class="step-info">
+                <strong>JWT Auth</strong>
+                <small>Signature & revocation</small>
+              </div>
+            </li>
+            <li class="pipe-step">
+              <span class="step-num">4</span>
+              <div class="step-info">
+                <strong>Role Check</strong>
+                <small>RBAC permissions</small>
+              </div>
+            </li>
+            <li class="pipe-step">
+              <span class="step-num">5</span>
+              <div class="step-info">
+                <strong>Forward Service</strong>
+                <small>Internal reverse proxy</small>
+              </div>
+            </li>
+            <li class="pipe-step">
+              <span class="step-num">6</span>
+              <div class="step-info">
+                <strong>Audit Log</strong>
+                <small>Async database audit</small>
+              </div>
+            </li>
+          </ol>
+          <p class="hero-footer">Learning-scale project, application layer gateway.</p>
+        </div>
+
+        <!-- Right: Auth Card -->
+        <div class="auth-card card">
+          <div class="tab-switcher" role="tablist">
+            <button id="auth-tab-login" class="tab-btn active" role="tab" type="button">Log In</button>
+            <button id="auth-tab-register" class="tab-btn" role="tab" type="button">Register</button>
+          </div>
+
+          <form id="auth-form" novalidate>
+            <div class="form-group">
+              <label for="auth-email">Email Address</label>
+              <input id="auth-email" type="email" placeholder="name@example.com" autocomplete="email" required>
+            </div>
+
+            <div class="form-group">
+              <label for="auth-password">Password</label>
+              <input id="auth-password" type="password" placeholder="At least 8 characters" autocomplete="current-password" required>
+            </div>
+
+            <div class="form-row show-pw-row">
+              <label class="checkbox-label" for="show-pw-toggle">
+                <input id="show-pw-toggle" type="checkbox">
+                <span>Show password</span>
+              </label>
+            </div>
+
+            <div id="auth-msg" class="alert-box hidden" role="alert" aria-live="polite"></div>
+
+            <button id="auth-submit-btn" class="btn btn-primary btn-block" type="submit">Log In</button>
+          </form>
+
+          <p id="auth-hint" class="text-muted text-sm auth-foot-hint">
+            New registrations automatically receive the <strong>viewer</strong> role.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Logged-In Screen -->
+    <section id="logged-in-view" class="view-section hidden">
+      <!-- Main Navigation Tabs -->
+      <nav class="console-nav" role="tablist">
+        <button id="nav-playground" class="console-tab active" role="tab" type="button">Playground</button>
+        <button id="nav-admin" class="console-tab" role="tab" type="button">Admin</button>
+        <button id="nav-session" class="console-tab" role="tab" type="button">Session</button>
+      </nav>
+
+      <!-- Tab 1: Playground -->
+      <div id="panel-playground" class="tab-panel active" role="tabpanel">
+        <div class="playground-layout">
+          <!-- Request Actions Panel -->
+          <div class="card">
+            <h3>Gateway Route Tester</h3>
+            <p class="text-muted text-sm">
+              Send authenticated requests through the gateway to test authentication, RBAC, and rate limiting.
+            </p>
+            <div class="button-grid">
+              <button id="btn-get-inventory" class="btn btn-outline" type="button">GET /api/inventory</button>
+              <button id="btn-post-inventory" class="btn btn-outline" type="button">POST /api/inventory</button>
+              <button id="btn-get-logs" class="btn btn-outline" type="button">GET /api/logs</button>
+              <button id="btn-get-audit" class="btn btn-outline" type="button">GET /admin/audit</button>
+              <button id="btn-spam-test" class="btn btn-accent" type="button">Send 15 quick requests</button>
+              <button id="btn-bad-token" class="btn btn-danger-outline" type="button">Call with a broken token</button>
+            </div>
+          </div>
+
+          <!-- Dynamic Pipeline Decision Visualizer -->
+          <div class="card">
+            <h3>Decision Pipeline</h3>
+            <p class="text-muted text-sm">
+              Highlights the pipeline stage that validated or blocked the latest request.
+            </p>
+            <ol id="live-pipeline" class="pipeline-diagram dynamic-pipeline" aria-label="Live inspection outcome">
+              <li id="pipe-live-1" class="pipe-step"><span class="step-num">1</span><div class="step-info"><strong>IP Block</strong><small>Check list</small></div></li>
+              <li id="pipe-live-2" class="pipe-step"><span class="step-num">2</span><div class="step-info"><strong>Rate Limit</strong><small>Limit quota</small></div></li>
+              <li id="pipe-live-3" class="pipe-step"><span class="step-num">3</span><div class="step-info"><strong>JWT Auth</strong><small>Validate token</small></div></li>
+              <li id="pipe-live-4" class="pipe-step"><span class="step-num">4</span><div class="step-info"><strong>RBAC Check</strong><small>Role policy</small></div></li>
+              <li id="pipe-live-5" class="pipe-step"><span class="step-num">5</span><div class="step-info"><strong>Proxying</strong><small>Forward</small></div></li>
+              <li id="pipe-live-6" class="pipe-step"><span class="step-num">6</span><div class="step-info"><strong>Audit Log</strong><small>Record event</small></div></li>
+            </ol>
+          </div>
+
+          <!-- Result Panel -->
+          <div class="card">
+            <div class="result-header">
+              <h3>Response Inspector</h3>
+              <div class="result-meta">
+                <span id="res-badge" class="status-badge badge-idle">Ready</span>
+                <span id="res-time" class="time-tag">0 ms</span>
+              </div>
+            </div>
+            <div id="res-explanation" class="explanation-callout" aria-live="polite">
+              Click any request button above to inspect gateway behavior.
+            </div>
+            <div class="json-container">
+              <pre id="res-json" class="json-viewer" aria-live="polite">// Response payload will appear here</pre>
+            </div>
+          </div>
+
+          <!-- Role Permissions Matrix -->
+          <div class="card">
+            <h3>Role &amp; Permissions Matrix</h3>
+            <div class="table-scroller">
+              <table id="matrix-table" class="data-table">
+                <thead>
+                  <tr>
+                    <th>Endpoint / Action</th>
+                    <th>Permission</th>
+                    <th id="col-viewer">Viewer</th>
+                    <th id="col-analyst">Analyst</th>
+                    <th id="col-admin">Admin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td>GET /api/inventory</td><td>inventory:read</td><td>Allowed</td><td>Allowed</td><td>Allowed</td></tr>
+                  <tr><td>POST /api/inventory</td><td>inventory:write</td><td>Denied (403)</td><td>Denied (403)</td><td>Allowed</td></tr>
+                  <tr><td>GET /api/logs</td><td>logs:read</td><td>Denied (403)</td><td>Allowed</td><td>Allowed</td></tr>
+                  <tr><td>GET /admin/audit</td><td>audit:read</td><td>Denied (403)</td><td>Allowed</td><td>Allowed</td></tr>
+                  <tr><td>Manage Blocked IPs</td><td>ips:manage</td><td>Denied (403)</td><td>Denied (403)</td><td>Allowed</td></tr>
+                  <tr><td>Change User Role</td><td>users:manage</td><td>Denied (403)</td><td>Denied (403)</td><td>Allowed</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Admin -->
+      <div id="panel-admin" class="tab-panel hidden" role="tabpanel">
+        <!-- Viewer locked notice -->
+        <div id="admin-locked-notice" class="card locked-card hidden">
+          <div class="locked-icon" aria-hidden="true">&#128274;</div>
+          <h3>Admin Panel Restricted</h3>
+          <p>
+            Your current role is <strong>viewer</strong>. Access to audit logs requires the <strong>analyst</strong> role, and IP blocking / user management requires the <strong>admin</strong> role.
+          </p>
+        </div>
+
+        <div id="admin-content" class="admin-content">
+          <!-- 4 Stat Cards from last 200 events -->
+          <div class="stats-grid">
+            <div class="stat-card card">
+              <div class="stat-label">Failed Logins</div>
+              <div id="stat-failed-logins" class="stat-value">0</div>
+              <div class="stat-sub">in the last 200 events</div>
+            </div>
+            <div class="stat-card card">
+              <div class="stat-label">Blocked Requests</div>
+              <div id="stat-blocked-requests" class="stat-value">0</div>
+              <div class="stat-sub">in the last 200 events</div>
+            </div>
+            <div class="stat-card card">
+              <div class="stat-label">Access Denied</div>
+              <div id="stat-access-denied" class="stat-value">0</div>
+              <div class="stat-sub">in the last 200 events</div>
+            </div>
+            <div class="stat-card card">
+              <div class="stat-label">Auto-Blocks</div>
+              <div id="stat-auto-blocks" class="stat-value">0</div>
+              <div class="stat-sub">in the last 200 events</div>
+            </div>
+          </div>
+
+          <!-- Audit Table Card -->
+          <div class="card">
+            <div class="card-bar">
+              <h3>Gateway Audit Trail</h3>
+              <div class="audit-controls">
+                <label for="filter-action" class="control-label">Action:
+                  <select id="filter-action">
+                    <option value="">All actions</option>
+                    <option value="login">login</option>
+                    <option value="logout">logout</option>
+                    <option value="register">register</option>
+                    <option value="access_denied">access_denied</option>
+                    <option value="blocked_request">blocked_request</option>
+                    <option value="auto_block">auto_block</option>
+                    <option value="ip_block">ip_block</option>
+                    <option value="ip_unblock">ip_unblock</option>
+                    <option value="role_change">role_change</option>
+                  </select>
+                </label>
+                <label for="filter-status" class="control-label">Status:
+                  <select id="filter-status">
+                    <option value="">All statuses</option>
+                    <option value="success">success</option>
+                    <option value="failed">failed</option>
+                    <option value="locked">locked</option>
+                    <option value="denied">denied</option>
+                  </select>
+                </label>
+                <label for="filter-limit" class="control-label">Limit:
+                  <select id="filter-limit">
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="200" selected>200</option>
+                  </select>
+                </label>
+                <label class="checkbox-label" for="auto-refresh-audit">
+                  <input id="auto-refresh-audit" type="checkbox">
+                  <span>Auto-refresh (5s)</span>
+                </label>
+                <button id="btn-refresh-audit" class="btn btn-outline btn-sm" type="button">Refresh</button>
+              </div>
+            </div>
+
+            <div id="audit-table-status" class="text-sm text-muted my-2" aria-live="polite"></div>
+
+            <div class="table-scroller">
+              <table id="audit-table" class="data-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>User ID</th>
+                    <th>IP</th>
+                    <th>Action</th>
+                    <th>Status</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody id="audit-table-body">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Admin-Only Management Section -->
+          <div id="admin-management-grid" class="admin-grid">
+            <!-- Blocked IPs card -->
+            <div class="card">
+              <h3>IP Blocklist Management</h3>
+              <p class="text-muted text-sm">
+                Active IP blocks stored in Postgres and mirrored to Redis for O(1) gateway edge drops.
+              </p>
+
+              <form id="block-ip-form" class="inline-form my-3" novalidate>
+                <div class="form-group flex-1">
+                  <label for="block-ip-input">Target IP</label>
+                  <input id="block-ip-input" type="text" placeholder="192.168.1.100" required>
+                </div>
+                <div class="form-group flex-2">
+                  <label for="block-reason-input">Reason</label>
+                  <input id="block-reason-input" type="text" placeholder="Suspicious activity" maxlength="200">
+                </div>
+                <button id="btn-block-ip" class="btn btn-danger align-self-end" type="submit">Block IP</button>
+              </form>
+              <div id="block-ip-msg" class="alert-box hidden" role="alert" aria-live="polite"></div>
+
+              <div class="table-scroller">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Blocked IP</th>
+                      <th>Reason</th>
+                      <th>Blocked At</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="blocked-ips-tbody">
+                    <!-- Dynamic -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Role Change Card -->
+            <div class="card">
+              <h3>User Role Assignment</h3>
+              <p class="text-muted text-sm">
+                Promote or demote users. Permissions will reflect on their next token issuance or session refresh.
+              </p>
+              <form id="change-role-form" class="stacked-form my-3" novalidate>
+                <div class="form-group">
+                  <label for="role-user-id">User ID</label>
+                  <input id="role-user-id" type="number" min="1" placeholder="e.g. 2" required>
+                </div>
+                <div class="form-group">
+                  <label for="role-select">New Role</label>
+                  <select id="role-select" required>
+                    <option value="viewer">viewer (read-only inventory)</option>
+                    <option value="analyst">analyst (read inventory, logs &amp; audit)</option>
+                    <option value="admin">admin (full gateway access)</option>
+                  </select>
+                </div>
+                <div id="change-role-msg" class="alert-box hidden" role="alert" aria-live="polite"></div>
+                <button id="btn-apply-role" class="btn btn-primary" type="submit">Apply Role Change</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Session -->
+      <div id="panel-session" class="tab-panel hidden" role="tabpanel">
+        <div class="session-layout">
+          <div class="card">
+            <h3>Decoded Token Claims</h3>
+            <p class="text-muted text-sm">
+              Extracted client-side from the verified JWT payload. The raw secret and tokens are never shown or logged.
+            </p>
+
+            <dl class="claims-list">
+              <div class="claim-item">
+                <dt>Subject (User ID)</dt>
+                <dd id="claim-sub">-</dd>
+              </div>
+              <div class="claim-item">
+                <dt>Assigned Role</dt>
+                <dd id="claim-role">-</dd>
+              </div>
+              <div class="claim-item">
+                <dt>Token Type</dt>
+                <dd id="claim-type">-</dd>
+              </div>
+              <div class="claim-item">
+                <dt>Session Email</dt>
+                <dd id="claim-email">-</dd>
+              </div>
+              <div class="claim-item">
+                <dt>Access Expiration</dt>
+                <dd>
+                  <span id="claim-exp">-</span>
+                  <strong id="claim-countdown" class="countdown-tag" aria-live="polite">-</strong>
+                </dd>
+              </div>
+            </dl>
+
+            <div class="session-actions">
+              <button id="btn-refresh-token" class="btn btn-primary" type="button">Refresh Token Now</button>
+              <button id="btn-logout" class="btn btn-danger-outline" type="button">Logout</button>
+            </div>
+            <div id="session-msg" class="alert-box hidden my-3" role="alert" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

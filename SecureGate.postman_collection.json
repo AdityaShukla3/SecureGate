@@ -20,6 +20,10 @@
     {
       "key": "refreshToken",
       "value": ""
+    },
+    {
+      "key": "adminRefreshToken",
+      "value": ""
     }
   ],
   "item": [
@@ -30,10 +34,25 @@
         "header": [],
         "url": {
           "raw": "{{baseUrl}}/health",
-          "host": ["{{baseUrl}}"],
-          "path": ["health"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 200\", function () { pm.expect([200]).to.include(pm.response.code); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "2. Direct Backend Call (Should Fail 403)",
@@ -43,11 +62,26 @@
         "url": {
           "raw": "http://localhost:4002/",
           "protocol": "http",
-          "host": ["localhost"],
+          "host": [
+            "localhost"
+          ],
           "port": "4002",
-          "path": [""]
+          "path": [
+            ""
+          ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 403\", function () { pm.expect([403]).to.include(pm.response.code); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "3. Register User (Viewer)",
@@ -65,10 +99,26 @@
         },
         "url": {
           "raw": "{{baseUrl}}/auth/register",
-          "host": ["{{baseUrl}}"],
-          "path": ["auth", "register"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "register"
+          ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 201 or 409\", function () { pm.expect([201, 409]).to.include(pm.response.code); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "4. Login as Viewer",
@@ -86,10 +136,31 @@
         },
         "url": {
           "raw": "{{baseUrl}}/auth/login",
-          "host": ["{{baseUrl}}"],
-          "path": ["auth", "login"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "login"
+          ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 200\", function () { pm.expect([200]).to.include(pm.response.code); });",
+              "if (pm.response.code === 200) {",
+              "  const b = pm.response.json();",
+              "  pm.collectionVariables.set(\"viewerToken\", b.access);       // saved automatically",
+              "  pm.collectionVariables.set(\"refreshToken\", b.refresh);",
+              "}"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "5. Login as Admin",
@@ -107,10 +178,31 @@
         },
         "url": {
           "raw": "{{baseUrl}}/auth/login",
-          "host": ["{{baseUrl}}"],
-          "path": ["auth", "login"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "login"
+          ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 200\", function () { pm.expect([200]).to.include(pm.response.code); });",
+              "if (pm.response.code === 200) {",
+              "  const b = pm.response.json();",
+              "  pm.collectionVariables.set(\"adminToken\", b.access);        // saved automatically",
+              "  pm.collectionVariables.set(\"adminRefreshToken\", b.refresh);",
+              "}"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "6. Access Proxied Inventory (Viewer Allowed - 200)",
@@ -124,10 +216,26 @@
         ],
         "url": {
           "raw": "{{baseUrl}}/api/inventory",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "inventory"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "inventory"
+          ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 200\", function () { pm.expect([200]).to.include(pm.response.code); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "7. Access Proxied Logs (Viewer Forbidden - 403)",
@@ -141,10 +249,26 @@
         ],
         "url": {
           "raw": "{{baseUrl}}/api/logs",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "logs"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "logs"
+          ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 403\", function () { pm.expect([403]).to.include(pm.response.code); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "8. Access Proxied Logs (Admin Allowed - 200)",
@@ -158,10 +282,26 @@
         ],
         "url": {
           "raw": "{{baseUrl}}/api/logs",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "logs"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "logs"
+          ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 200\", function () { pm.expect([200]).to.include(pm.response.code); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "9. View Audit Trail (Admin Only)",
@@ -175,10 +315,26 @@
         ],
         "url": {
           "raw": "{{baseUrl}}/admin/audit",
-          "host": ["{{baseUrl}}"],
-          "path": ["admin", "audit"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "admin",
+            "audit"
+          ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 200\", function () { pm.expect([200]).to.include(pm.response.code); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "10. Admin Block IP",
@@ -200,10 +356,27 @@
         },
         "url": {
           "raw": "{{baseUrl}}/admin/ips/block",
-          "host": ["{{baseUrl}}"],
-          "path": ["admin", "ips", "block"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "admin",
+            "ips",
+            "block"
+          ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 201\", function () { pm.expect([201]).to.include(pm.response.code); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "11. Refresh Token Exchange",
@@ -221,10 +394,32 @@
         },
         "url": {
           "raw": "{{baseUrl}}/auth/refresh",
-          "host": ["{{baseUrl}}"],
-          "path": ["auth", "refresh"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "refresh"
+          ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 200\", function () { pm.expect([200]).to.include(pm.response.code); });",
+              "if (pm.response.code === 200) {",
+              "  const b = pm.response.json();",
+              "  // refresh tokens work only once, so save BOTH new tokens",
+              "  pm.collectionVariables.set(\"viewerToken\", b.access);",
+              "  pm.collectionVariables.set(\"refreshToken\", b.refresh);",
+              "}"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "12. Logout (Revoke Token)",
@@ -246,10 +441,26 @@
         },
         "url": {
           "raw": "{{baseUrl}}/auth/logout",
-          "host": ["{{baseUrl}}"],
-          "path": ["auth", "logout"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "logout"
+          ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 200\", function () { pm.expect([200]).to.include(pm.response.code); });"
+            ]
+          }
+        }
+      ]
     }
   ]
 }
