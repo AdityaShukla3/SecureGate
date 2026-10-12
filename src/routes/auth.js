@@ -2,13 +2,76 @@ const router = require('express').Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { z } = require('zod');
+const { OAuth2Client } = require('google-auth-library');
 const db = require('../config/db');
 const redis = require('../config/redis');
 const audit = require('../services/audit');
 const auth = require('../middleware/auth');
 const { issuePair } = require('../services/tokens');
 
+const googleClient = new OAuth2Client();
 const creds = z.object({ email: z.string().email(), password: z.string().min(8) });
+
+router.get('/config', (req, res) => {
+  res.json({
+    googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+  });
+});
+
+router.post('/google', async (req, res) => {
+  const { credential } = req.body || {};
+  if (!credential) {
+    return res.status(400).json({ error: 'Missing Google credential' });
+  }
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    return res.status(500).json({ error: 'Google client ID not configured in server environment' });
+  }
+
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: clientId,
+    });
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      return res.status(400).json({ error: 'Google token does not contain a verified email' });
+    }
+
+    if (!payload.email_verified) {
+      return res.status(400).json({ error: 'Google email address is not verified' });
+    }
+
+    const email = payload.email.toLowerCase();
+
+    let { rows } = await db.query(
+      `SELECT u.id, r.name AS role FROM users u
+       JOIN roles r ON r.id = u.role_id WHERE u.email = $1`,
+      [email]
+    );
+
+    let user = rows[0];
+    if (!user) {
+      const created = await db.query(
+        `INSERT INTO users(email, auth_provider, role_id)
+         SELECT $1, 'google', id FROM roles WHERE name='viewer' RETURNING id`,
+        [email]
+      );
+      user = { id: created.rows[0].id, role: 'viewer', email };
+      audit({ userId: user.id, ip: req.ip, action: 'register', status: 'success', meta: { provider: 'google', email } });
+    } else {
+      user.email = email;
+      audit({ userId: user.id, ip: req.ip, action: 'login', status: 'success', meta: { provider: 'google', email } });
+    }
+
+    const pair = await issuePair(user);
+    res.json({ ...pair, email: user.email, role: user.role });
+  } catch (err) {
+    audit({ ip: req.ip, action: 'login', status: 'failed', meta: { provider: 'google', error: err.message } });
+    return res.status(401).json({ error: `Google verification failed: ${err.message}` });
+  }
+});
 
 router.post('/register', async (req, res) => {
   const { email, password } = creds.parse(req.body);

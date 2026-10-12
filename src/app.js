@@ -22,7 +22,22 @@ app.get('/', (req, res) => res.redirect('/ui/'));
 // Only trust X-Forwarded-For when really behind Nginx/a platform proxy, or clients can fake their IP.
 if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY));
 
-app.use(helmet(), cors());
+app.use(
+  helmet({
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "https://accounts.google.com/gsi/client", "'unsafe-inline'"],
+        frameSrc: ["'self'", "https://accounts.google.com/gsi/"],
+        connectSrc: ["'self'", "https://accounts.google.com/gsi/"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://accounts.google.com/gsi/style"],
+        imgSrc: ["'self'", "data:", "https://*.googleusercontent.com"],
+      },
+    },
+  }),
+  cors()
+);
 
 app.use(ipBlock);
 

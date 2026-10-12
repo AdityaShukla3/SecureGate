@@ -1417,6 +1417,109 @@ body.control-room-body {
 
 .btn-block { width: 100%; }
 
+/* ==========================================================================
+   Google OAuth Sign-In / Sign-Up Button
+   ========================================================================== */
+
+.btn-google,
+.cyber-google-btn {
+  position: relative;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%), rgba(10, 24, 46, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  padding: 0.72rem 1.4rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  margin-top: 0.35rem;
+}
+
+.btn-google::before,
+.cyber-google-btn::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+  transform: skewX(-25deg);
+  transition: left 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+.btn-google:hover,
+.cyber-google-btn:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 100%), rgba(15, 34, 64, 0.95);
+  border-color: rgba(255, 255, 255, 0.45);
+  box-shadow: 
+    0 8px 24px rgba(66, 133, 244, 0.28),
+    0 0 16px rgba(255, 255, 255, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.btn-google:hover::before,
+.cyber-google-btn:hover::before {
+  left: 150%;
+}
+
+.btn-google:active,
+.cyber-google-btn:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.google-svg {
+  flex-shrink: 0;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+.auth-or-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 0.85rem 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.auth-or-divider::before,
+.auth-or-divider::after {
+  content: "";
+  flex: 1;
+  border-bottom: 1px solid rgba(0, 240, 255, 0.18);
+}
+
+.auth-or-divider span {
+  padding: 0 0.75rem;
+  color: rgba(148, 163, 184, 0.75);
+}
+
+.gis-hidden {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
 .session-actions {
   display: flex;
   align-items: center;

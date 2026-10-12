@@ -183,6 +183,7 @@ test('gateway returns 502 when the backend is down', async () => {
 });
 
 test('one IP failing logins for 10 different accounts gets auto-blocked', async () => {
+  await redis.del('blip:10.0.0.30', 'stuff:10.0.0.30', 'rl:auth:10.0.0.30');
   for (let i = 0; i < 10; i++) {
     await login(`victim${i}-${Date.now()}@x.dev`, 'wrongpass1', '10.0.0.30');
   }
@@ -223,4 +224,16 @@ test('logout with no body does not crash, and bad JSON gives 400', async () => {
     .set('Content-Type', 'application/json')
     .send('{bad');
   expect(bad.status).toBe(400);
+});
+
+test('auth config returns googleClientId property', async () => {
+  const r = await request(app).get('/auth/config');
+  expect(r.status).toBe(200);
+  expect(r.body).toHaveProperty('googleClientId');
+});
+
+test('google auth requires credential payload', async () => {
+  const r = await request(app).post('/auth/google').send({});
+  expect(r.status).toBe(400);
+  expect(r.body.error).toMatch(/Missing Google credential/i);
 });

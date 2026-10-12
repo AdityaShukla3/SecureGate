@@ -608,6 +608,77 @@
     });
   }
 
+  // Google Identity Services (OAuth) State & Handlers
+  let googleClientId = null;
+  let gisInitialized = false;
+
+  async function initGoogleAuth() {
+    try {
+      const res = await api('/auth/config', { auth: false });
+      if (res.data && res.data.googleClientId) {
+        googleClientId = res.data.googleClientId;
+      }
+    } catch (err) {
+      console.warn('Could not fetch auth config:', err);
+    }
+    setupGisIfReady();
+  }
+
+  function setupGisIfReady() {
+    if (!googleClientId || gisInitialized || !window.google?.accounts?.id) return;
+    try {
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: handleGoogleCredentialResponse,
+        auto_select: false,
+        cancel_on_tap_outside: true,
+      });
+
+      const hiddenDiv = el('gis-hidden-btn');
+      if (hiddenDiv) {
+        window.google.accounts.id.renderButton(hiddenDiv, {
+          theme: 'outline',
+          size: 'large',
+          type: 'standard',
+        });
+      }
+      gisInitialized = true;
+    } catch (e) {
+      console.warn('Google Identity Services init error:', e);
+    }
+  }
+
+  async function handleGoogleCredentialResponse(response) {
+    if (!response || !response.credential) {
+      showMsg(el('auth-msg'), 'No credential received from Google.');
+      return;
+    }
+
+    hideMsg(el('auth-msg'));
+    const googleBtn = el('btn-google-auth');
+    if (googleBtn) googleBtn.disabled = true;
+
+    try {
+      const res = await api('/auth/google', {
+        method: 'POST',
+        body: { credential: response.credential },
+        auth: false,
+      });
+
+      if (res.status === 200 && res.data.access && res.data.refresh) {
+        saveSession(res.data.access, res.data.refresh, res.data.email);
+        el('auth-password').value = '';
+        render();
+      } else {
+        showMsg(el('auth-msg'), res.data.error || 'Google authentication failed.');
+      }
+    } catch (err) {
+      showMsg(el('auth-msg'), err.message || 'Network error during Google sign-in.');
+    } finally {
+      if (googleBtn) googleBtn.disabled = false;
+    }
+  }
+
   // Setup Event Listeners
   function setupEvents() {
     // Auth Tabs
@@ -615,14 +686,20 @@
       authMode = 'login';
       el('auth-tab-login').classList.add('active');
       el('auth-tab-register').classList.remove('active');
-      el('auth-submit-btn').querySelector('.btn-text').textContent = 'Authenticate Session';
+      const submitText = el('auth-submit-btn')?.querySelector('.btn-text');
+      if (submitText) submitText.textContent = 'Log In';
+      const gText = el('google-btn-text');
+      if (gText) gText.textContent = 'Sign In with Google';
       hideMsg(el('auth-msg'));
     });
     el('auth-tab-register').addEventListener('click', () => {
       authMode = 'register';
       el('auth-tab-register').classList.add('active');
       el('auth-tab-login').classList.remove('active');
-      el('auth-submit-btn').querySelector('.btn-text').textContent = 'Register Operator';
+      const submitText = el('auth-submit-btn')?.querySelector('.btn-text');
+      if (submitText) submitText.textContent = 'Create Account';
+      const gText = el('google-btn-text');
+      if (gText) gText.textContent = 'Sign Up with Google';
       hideMsg(el('auth-msg'));
     });
 
@@ -630,6 +707,43 @@
     el('show-pw-toggle').addEventListener('change', (e) => {
       el('auth-password').type = e.target.checked ? 'text' : 'password';
     });
+
+    // Google OAuth Button Click Trigger
+    const googleBtn = el('btn-google-auth');
+    if (googleBtn) {
+      googleBtn.addEventListener('click', () => {
+        hideMsg(el('auth-msg'));
+        if (!googleClientId) {
+          showMsg(
+            el('auth-msg'),
+            'Google Client ID is not configured. Please add GOOGLE_CLIENT_ID to your .env file and restart the server.'
+          );
+          return;
+        }
+
+        if (!window.google?.accounts?.id) {
+          showMsg(
+            el('auth-msg'),
+            'Google Identity Services is initializing. Please verify your connection or try again.'
+          );
+          return;
+        }
+
+        setupGisIfReady();
+
+        const hiddenIframeBtn = el('gis-hidden-btn')?.querySelector('div[role="button"]');
+        if (hiddenIframeBtn) {
+          hiddenIframeBtn.click();
+        } else {
+          window.google.accounts.id.prompt((notification) => {
+            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+              const btn = el('gis-hidden-btn')?.querySelector('div[role="button"]');
+              if (btn) btn.click();
+            }
+          });
+        }
+      });
+    }
 
     // Auth Form Submission
     el('auth-form').addEventListener('submit', async (e) => {
@@ -799,7 +913,9 @@
     loadSession();
     render();
     checkHealth();
+    initGoogleAuth();
     setInterval(checkHealth, 15000);
+    window.addEventListener('load', () => setupGisIfReady());
   }
 
   init();

@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 CREATE TABLE IF NOT EXISTS users (
  id SERIAL PRIMARY KEY,
  email TEXT UNIQUE NOT NULL,
- password_hash TEXT NOT NULL,
+ password_hash TEXT,
+ auth_provider TEXT DEFAULT 'local',
  role_id INT REFERENCES roles(id),
  created_at TIMESTAMPTZ DEFAULT now());
 CREATE TABLE IF NOT EXISTS blocked_ips (
