@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SecureGate Console | 3D Security Control Room</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="app.js" defer></script>
+  <link rel="stylesheet" href="style.css?v=3">
+  <script src="app.js?v=3" defer></script>
 </head>
 <body class="control-room-body">
   <!-- Cyber Ambient Grid & Particle Canvas Layer -->
@@ -148,20 +148,11 @@
 
     <!-- Logged-In Screen -->
     <section id="logged-in-view" class="view-section hidden">
-      <!-- Main Navigation Tabs -->
+      <!-- Main Navigation Tabs (Clean segmented control without emoji prefixes) -->
       <nav class="console-nav" role="tablist">
-        <button id="nav-playground" class="console-tab active" role="tab" type="button">
-          <span class="tab-icon">⚡</span>
-          <span>Playground</span>
-        </button>
-        <button id="nav-admin" class="console-tab" role="tab" type="button">
-          <span class="tab-icon">🛡️</span>
-          <span>Admin Center</span>
-        </button>
-        <button id="nav-session" class="console-tab" role="tab" type="button">
-          <span class="tab-icon">🔑</span>
-          <span>Session Token</span>
-        </button>
+        <button id="nav-playground" class="console-tab active" role="tab" type="button">Playground</button>
+        <button id="nav-admin" class="console-tab" role="tab" type="button">Admin Center</button>
+        <button id="nav-session" class="console-tab" role="tab" type="button">Session Token</button>
       </nav>
 
       <!-- Tab 1: Playground -->
@@ -258,7 +249,11 @@
                   <div class="node-glass-face">
                     <div class="node-header">
                       <span class="step-num">01</span>
-                      <span class="node-icon">🛡️</span>
+                      <span class="node-icon">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        </svg>
+                      </span>
                     </div>
                     <div class="step-info">
                       <strong class="node-title">IP Block</strong>
@@ -276,7 +271,12 @@
                   <div class="node-glass-face">
                     <div class="node-header">
                       <span class="step-num">02</span>
-                      <span class="node-icon">⏱️</span>
+                      <span class="node-icon">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <circle cx="12" cy="12" r="10"></circle>
+                          <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                      </span>
                     </div>
                     <div class="step-info">
                       <strong class="node-title">Rate Limit</strong>
@@ -294,7 +294,12 @@
                   <div class="node-glass-face">
                     <div class="node-header">
                       <span class="step-num">03</span>
-                      <span class="node-icon">🔑</span>
+                      <span class="node-icon">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M21 2l-2 2m-1.5 1.5L12 11l-4-4-6 6 6 6 4-4 5.5-5.5"></path>
+                          <path d="m15.5 7.5 3 3"></path>
+                        </svg>
+                      </span>
                     </div>
                     <div class="step-info">
                       <strong class="node-title">JWT Auth</strong>
@@ -312,7 +317,13 @@
                   <div class="node-glass-face">
                     <div class="node-header">
                       <span class="step-num">04</span>
-                      <span class="node-icon">⚖️</span>
+                      <span class="node-icon">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                          <circle cx="9" cy="7" r="4"></circle>
+                          <polyline points="16 11 18 13 22 9"></polyline>
+                        </svg>
+                      </span>
                     </div>
                     <div class="step-info">
                       <strong class="node-title">RBAC Check</strong>
@@ -330,7 +341,12 @@
                   <div class="node-glass-face">
                     <div class="node-header">
                       <span class="step-num">05</span>
-                      <span class="node-icon">🚀</span>
+                      <span class="node-icon">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="5" y1="12" x2="19" y2="12"></line>
+                          <polyline points="12 5 19 12 12 19"></polyline>
+                        </svg>
+                      </span>
                     </div>
                     <div class="step-info">
                       <strong class="node-title">Proxying</strong>
@@ -348,7 +364,14 @@
                   <div class="node-glass-face">
                     <div class="node-header">
                       <span class="step-num">06</span>
-                      <span class="node-icon">📋</span>
+                      <span class="node-icon">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                          <polyline points="14 2 14 8 20 8"></polyline>
+                          <line x1="16" y1="13" x2="8" y2="13"></line>
+                          <line x1="16" y1="17" x2="8" y2="17"></line>
+                        </svg>
+                      </span>
                     </div>
                     <div class="step-info">
                       <strong class="node-title">Audit Log</strong>
@@ -383,7 +406,10 @@
                 <span id="res-badge" class="status-badge badge-idle">Ready</span>
                 <span id="res-time" class="time-tag">0 ms</span>
                 <button id="btn-copy-json" class="btn-cyber-copy" type="button" title="Copy response JSON">
-                  <span class="copy-icon">📋</span>
+                  <svg class="copy-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
                   <span id="copy-btn-text">Copy JSON</span>
                 </button>
               </div>
@@ -391,7 +417,7 @@
 
             <!-- Retry Banner for 429 -->
             <div id="res-retry-banner" class="retry-banner hidden" role="alert">
-              <span class="retry-icon">⏳</span>
+              <span class="retry-dot pulse-dot"></span>
               <span id="res-retry-text">Rate quota reached. Cooldown in progress...</span>
             </div>
 
@@ -439,44 +465,44 @@
                   <tr id="row-get-inventory" data-route="GET /api/inventory">
                     <td class="font-mono text-cyan">GET /api/inventory</td>
                     <td><code>inventory:read</code></td>
-                    <td class="cell-perm"><span class="perm-pill perm-allowed"><span class="perm-icon">✔</span> Allowed</span></td>
-                    <td class="cell-perm"><span class="perm-pill perm-allowed"><span class="perm-icon">✔</span> Allowed</span></td>
-                    <td class="cell-perm"><span class="perm-pill perm-allowed"><span class="perm-icon">✔</span> Allowed</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-allowed">Allowed</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-allowed">Allowed</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-allowed">Allowed</span></td>
                   </tr>
                   <tr id="row-post-inventory" data-route="POST /api/inventory">
                     <td class="font-mono text-cyan">POST /api/inventory</td>
                     <td><code>inventory:write</code></td>
-                    <td class="cell-perm"><span class="perm-pill perm-denied"><span class="perm-icon">✖</span> Denied (403)</span></td>
-                    <td class="cell-perm"><span class="perm-pill perm-denied"><span class="perm-icon">✖</span> Denied (403)</span></td>
-                    <td class="cell-perm"><span class="perm-pill perm-allowed"><span class="perm-icon">✔</span> Allowed</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-denied">Denied (403)</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-denied">Denied (403)</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-allowed">Allowed</span></td>
                   </tr>
                   <tr id="row-get-logs" data-route="GET /api/logs">
                     <td class="font-mono text-cyan">GET /api/logs</td>
                     <td><code>logs:read</code></td>
-                    <td class="cell-perm"><span class="perm-pill perm-denied"><span class="perm-icon">✖</span> Denied (403)</span></td>
-                    <td class="cell-perm"><span class="perm-pill perm-allowed"><span class="perm-icon">✔</span> Allowed</span></td>
-                    <td class="cell-perm"><span class="perm-pill perm-allowed"><span class="perm-icon">✔</span> Allowed</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-denied">Denied (403)</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-allowed">Allowed</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-allowed">Allowed</span></td>
                   </tr>
                   <tr id="row-get-audit" data-route="GET /admin/audit">
                     <td class="font-mono text-cyan">GET /admin/audit</td>
                     <td><code>audit:read</code></td>
-                    <td class="cell-perm"><span class="perm-pill perm-denied"><span class="perm-icon">✖</span> Denied (403)</span></td>
-                    <td class="cell-perm"><span class="perm-pill perm-allowed"><span class="perm-icon">✔</span> Allowed</span></td>
-                    <td class="cell-perm"><span class="perm-pill perm-allowed"><span class="perm-icon">✔</span> Allowed</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-denied">Denied (403)</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-allowed">Allowed</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-allowed">Allowed</span></td>
                   </tr>
                   <tr id="row-manage-ips" data-route="ips:manage">
                     <td class="font-mono text-cyan">Manage Blocked IPs</td>
                     <td><code>ips:manage</code></td>
-                    <td class="cell-perm"><span class="perm-pill perm-denied"><span class="perm-icon">✖</span> Denied (403)</span></td>
-                    <td class="cell-perm"><span class="perm-pill perm-denied"><span class="perm-icon">✖</span> Denied (403)</span></td>
-                    <td class="cell-perm"><span class="perm-pill perm-allowed"><span class="perm-icon">✔</span> Allowed</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-denied">Denied (403)</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-denied">Denied (403)</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-allowed">Allowed</span></td>
                   </tr>
                   <tr id="row-change-role" data-route="users:manage">
                     <td class="font-mono text-cyan">Change User Role</td>
                     <td><code>users:manage</code></td>
-                    <td class="cell-perm"><span class="perm-pill perm-denied"><span class="perm-icon">✖</span> Denied (403)</span></td>
-                    <td class="cell-perm"><span class="perm-pill perm-denied"><span class="perm-icon">✖</span> Denied (403)</span></td>
-                    <td class="cell-perm"><span class="perm-pill perm-allowed"><span class="perm-icon">✔</span> Allowed</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-denied">Denied (403)</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-denied">Denied (403)</span></td>
+                    <td class="cell-perm"><span class="perm-pill perm-allowed">Allowed</span></td>
                   </tr>
                 </tbody>
               </table>
@@ -490,7 +516,12 @@
       <div id="panel-admin" class="tab-panel hidden" role="tabpanel">
         <!-- Viewer locked notice -->
         <div id="admin-locked-notice" class="card glass-panel locked-card hidden">
-          <div class="locked-icon" aria-hidden="true">🔒</div>
+          <div class="locked-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
           <h3>Admin Panel Restricted</h3>
           <p>
             Your current role is <strong class="text-cyan">viewer</strong>. Access to audit logs requires the <strong>analyst</strong> role, and IP blocking / user management requires the <strong>admin</strong> role.
