@@ -17,8 +17,8 @@
 
     <div class="header-status">
       <div class="health-indicators" aria-label="Gateway dependencies health">
-        <span id="db-health" class="health-pill down" aria-live="polite">DB checking...</span>
-        <span id="redis-health" class="health-pill down" aria-live="polite">Redis checking...</span>
+        <span id="db-health" class="health-pill checking" aria-live="polite">DB checking...</span>
+        <span id="redis-health" class="health-pill checking" aria-live="polite">Redis checking...</span>
       </div>
 
       <div id="user-chip" class="user-chip hidden" aria-label="Current user session">
@@ -148,7 +148,7 @@
               <button id="btn-post-inventory" class="btn btn-outline" type="button">POST /api/inventory</button>
               <button id="btn-get-logs" class="btn btn-outline" type="button">GET /api/logs</button>
               <button id="btn-get-audit" class="btn btn-outline" type="button">GET /admin/audit</button>
-              <button id="btn-spam-test" class="btn btn-accent" type="button">Send 15 quick requests</button>
+              <button id="btn-spam-test" class="btn btn-accent" type="button">Rate-limit demo (sends up to 130)</button>
               <button id="btn-bad-token" class="btn btn-danger-outline" type="button">Call with a broken token</button>
             </div>
           </div>

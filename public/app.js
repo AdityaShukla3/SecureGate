@@ -16,6 +16,11 @@
     return node;
   };
 
+  // Show a date + time that is easy to read, e.g. "12 Oct, 14:03:21"
+  const fmtTime = (iso) => new Date(iso).toLocaleString([], {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+
   // Safe client-side base64url decode of JWT payload
   function decodeJwt(token) {
     try {
@@ -187,6 +192,7 @@
     if (isViewer) return;
     el('admin-management-grid').classList.toggle('hidden', !isAdmin);
     if (isAdmin) loadBlockedIps();
+    if (el('auto-refresh-audit').checked && !auditTimer) auditTimer = setInterval(loadAuditTrail, 5000);
     await loadAuditTrail();
   }
 
@@ -205,18 +211,7 @@
     }
     el('audit-table-status').textContent = `Displaying ${data.length} event(s).`;
 
-    // Compute stats from last 200 records
-    let fail = 0, blk = 0, den = 0, auto = 0;
-    data.slice(0, 200).forEach((r) => {
-      if (r.action === 'login' && r.status === 'failed') fail++;
-      if (r.action === 'blocked_request' || r.status === 'denied' || r.action === 'auto_block') blk++;
-      if (r.action === 'access_denied') den++;
-      if (r.action === 'auto_block') auto++;
-    });
-    el('stat-failed-logins').textContent = String(fail);
-    el('stat-blocked-requests').textContent = String(blk);
-    el('stat-access-denied').textContent = String(den);
-    el('stat-auto-blocks').textContent = String(auto);
+    loadStats(); // the 4 cards always use the latest 200 events, whatever the filters are
 
     // Build audit table safely
     const tbody = el('audit-table-body');
@@ -230,9 +225,20 @@
     data.forEach((r) => {
       const tr = mk('tr'), tdSt = mk('td');
       tdSt.appendChild(mk('span', `badge-status badge-${r.status}`, r.status));
-      [mk('td', null, new Date(r.created_at).toLocaleTimeString()), mk('td', null, r.user_id ? String(r.user_id) : '—'), mk('td', null, r.ip || '—'), mk('td', null, r.action), tdSt, mk('td', null, r.meta ? JSON.stringify(r.meta) : '')].forEach((c) => tr.appendChild(c));
+      [mk('td', null, fmtTime(r.created_at)), mk('td', null, r.user_id ? String(r.user_id) : '—'), mk('td', null, r.ip || '—'), mk('td', null, r.action), tdSt, mk('td', null, r.meta ? JSON.stringify(r.meta) : '')].forEach((c) => tr.appendChild(c));
       tbody.appendChild(tr);
     });
+  }
+
+  // The 4 stat cards: always the latest 200 events, never filtered
+  async function loadStats() {
+    const { status, data } = await api('/admin/audit?limit=200');
+    if (status !== 200 || !Array.isArray(data)) return;
+    const count = (fn) => String(data.filter(fn).length);
+    el('stat-failed-logins').textContent = count((r) => r.action === 'login' && r.status === 'failed');
+    el('stat-blocked-requests').textContent = count((r) => r.action === 'blocked_request');
+    el('stat-access-denied').textContent = count((r) => r.action === 'access_denied');
+    el('stat-auto-blocks').textContent = count((r) => r.action === 'auto_block');
   }
 
   // Load and manage Blocked IPs
@@ -254,10 +260,10 @@
         btn.disabled = true;
         const res = await api(`/admin/ips/${encodeURIComponent(item.ip)}`, { method: 'DELETE' });
         if (res.status === 200) { loadBlockedIps(); loadAuditTrail(); }
-        else { alert(res.data.error || 'Failed to unblock IP'); btn.disabled = false; }
+        else { showMsg(el('block-ip-msg'), res.data.error || 'Failed to unblock IP.'); btn.disabled = false; }
       });
       tdAct.appendChild(btn);
-      [mk('td', null, item.ip), mk('td', null, item.reason || 'manual'), mk('td', null, item.created_at ? new Date(item.created_at).toLocaleTimeString() : '—'), tdAct].forEach((c) => tr.appendChild(c));
+      [mk('td', null, item.ip), mk('td', null, item.reason || 'manual'), mk('td', null, item.created_at ? fmtTime(item.created_at) : '—'), tdAct].forEach((c) => tr.appendChild(c));
       tbody.appendChild(tr);
     });
   }
@@ -336,7 +342,7 @@
     // Logout actions
     const doLogout = async () => {
       if (state.access && state.refresh) await api('/auth/logout', { method: 'POST', body: { refreshToken: state.refresh } });
-      clearSession(); render('You have logged out.');
+      clearSession(); currentTab = 'playground'; render('You have logged out.');
     };
     [el('header-logout-btn'), el('btn-logout')].forEach((b) => b.addEventListener('click', doLogout));
 
@@ -353,38 +359,47 @@
       ['btn-get-audit', '/admin/audit?limit=10', 'GET', null],
     ].forEach(([id, path, method, body]) => {
       el(id).addEventListener('click', (e) => runBtn(e.target, async () => {
-        const { status, data, ms } = await api(path, { method, body });
-        showResult(status, data, ms);
+        const { status, data, ms, retryAfter } = await api(path, { method, body });
+        showResult(status, data, ms, retryAfter);
       }));
     });
 
-    // 15 rapid requests demo
+    // Rate-limit demo: keep sending requests until the gateway answers 429 (max 130).
+    // The default limit is 100 requests per minute per IP, so 15 requests could never trigger it.
     el('btn-spam-test').addEventListener('click', async (e) => {
       const btn = e.target; btn.disabled = true;
-      let okCount = 0, rateCount = 0;
-      el('res-explanation').textContent = 'Sending 15 rapid requests sequentially...';
+      const MAX = 130;
+      let sent = 0, allowed = 0, retry = null;
+      const t0 = performance.now();
+      el('res-explanation').textContent = 'Sending requests until the gateway says 429...';
       try {
-        for (let i = 1; i <= 15; i++) {
-          const { status } = await api('/api/inventory');
-          if (status === 200) okCount++;
-          if (status === 429) rateCount++;
+        while (sent < MAX) {
+          const r = await api('/api/inventory');
+          sent++;
+          if (r.status === 429) { retry = r.retryAfter; break; }
+          if (r.status === 200) allowed++;
+          else { showResult(r.status, r.data, r.ms, r.retryAfter); return; } // some other problem
         }
-        showResult(rateCount > 0 ? 429 : 200, { totalSent: 15, allowed_200: okCount, rateLimited_429: rateCount }, 120);
-        el('res-explanation').textContent = `Completed 15 requests: ${okCount} allowed (200), ${rateCount} throttled (429).`;
+        const ms = Math.round(performance.now() - t0);
+        const hit = retry !== null;
+        showResult(hit ? 429 : 200, { sent, allowed_200: allowed, rate_limited_429: hit ? 1 : 0, retry_after_seconds: retry }, ms, retry);
+        el('res-explanation').textContent = hit
+          ? `Rate limit reached after ${allowed} allowed requests. Your IP is blocked for about ${retry || 60}s, so other buttons will show 429 until then.`
+          : `${sent} requests were all allowed: the gateway limit is higher than ${MAX} per minute.`;
       } finally { btn.disabled = false; }
     });
 
     // Broken token demo
     el('btn-bad-token').addEventListener('click', (e) => runBtn(e.target, async () => {
-      const { status, data, ms } = await api('/api/inventory', { fakeToken: 'Bearer invalid.token.payload' });
-      showResult(status, data, ms);
+      const { status, data, ms, retryAfter } = await api('/api/inventory', { fakeToken: 'Bearer invalid.token.payload' });
+      showResult(status, data, ms, retryAfter);
     }));
 
     // Admin filter events
     ['filter-action', 'filter-status', 'filter-limit'].forEach((id) => el(id).addEventListener('change', loadAuditTrail));
     el('btn-refresh-audit').addEventListener('click', loadAuditTrail);
     el('auto-refresh-audit').addEventListener('change', (e) => {
-      clearInterval(auditTimer);
+      clearInterval(auditTimer); auditTimer = null;
       if (e.target.checked) auditTimer = setInterval(loadAuditTrail, 5000);
     });
 

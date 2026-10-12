@@ -198,14 +198,12 @@ Follow this script to demonstrate all security capabilities during interview pre
 
 ---
 
-## 8. Honest Limitations & Future Work
+## 8. Honest Limitations & Future Improvements
 
-As an application-layer learning gateway, SecureGate was intentionally designed with the following known trade-offs:
+As an educational backend architecture project, SecureGate was intentionally designed with the following pragmatic trade-offs:
 
-1. **Role Update Latency**: User roles are embedded in access JWTs. A database role change takes effect when the token expires (up to 15 minutes). *Production alternative*: Query Redis role cache per request.
-2. **Single Point of Failure**: Gateway currently runs as a single instance. *Production alternative*: Multi-instance deployment behind HAProxy/AWS ALB with Redis Cluster.
-3. **Symmetric Secrets (HS256)**: Access tokens use symmetric signing. *Production alternative*: Asymmetric RS256 or EdDSA with public key distribution.
-4. **Internal Network Security**: Traffic between gateway and microservices is plain HTTP. *Production alternative*: Mutual TLS (mTLS) in a Service Mesh (Istio / Linkerd).
-5. **Audit Table Scaling**: High request volume can cause PostgreSQL `audit_logs` to grow rapidly. *Production alternative*: Stream audit records to Apache Kafka / Cloud PubSub for ingestion into BigQuery or Elasticsearch.
-6. **Account lockout can be abused**: Someone who knows your email can fail 5 logins on purpose and lock you out for 15 minutes. *Better version*: Also inspect visitor's IP address, or add a CAPTCHA.
-7. **Audit log can flood**: A blocked address still writes a log row on every request, so the table can grow fast. *Better version*: One log row per minute per blocked address.
+1. **Role Update Latency**: User roles are embedded in access JWTs. A database role change takes effect when the token expires (up to 15 minutes). *Improvement*: Query Redis role cache per request for instant permission changes.
+2. **Audit Table Scaling & Pagination**: High request volume causes PostgreSQL `audit_logs` to grow steadily. *Improvement*: Implement cursor-based pagination and automated table archiving for old logs.
+3. **Per-User Rate Limiting**: Rate limits currently track client IP addresses. *Improvement*: Enforce distinct rate limits keyed by authenticated `userId` so different users on the same corporate NAT/network don't share a bucket.
+4. **Account Lockout Protection**: Someone who knows an email could intentionally fail 5 attempts to trigger a lockout. *Improvement*: Introduce a CAPTCHA or magic-link reset after 3 failures instead of an outright temporary block.
+5. **Audit Log Sampling**: Blocked requests generate an audit log entry on every attempt. *Improvement*: Rate-limit audit log writes to 1 log per minute for persistently blocked addresses.
