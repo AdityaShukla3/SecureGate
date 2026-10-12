@@ -1,13 +1,15 @@
-// SecureGate Console - Frontend Application Logic
+// SecureGate Console — 3D Cyber Control Room Frontend Logic
 (() => {
   'use strict';
 
-  // App session state
+  // App Session State
   const state = { access: null, refresh: null, email: null, user: null };
   let refreshPromise = null, auditTimer = null, countTimer = null;
   let authMode = 'login', currentTab = 'playground';
+  let activeAnimId = 0;
+  let lastResponseData = null;
 
-  // DOM element helpers
+  // DOM Helpers
   const el = (id) => document.getElementById(id);
   const mk = (tag, cls, txt) => {
     const node = document.createElement(tag);
@@ -16,12 +18,12 @@
     return node;
   };
 
-  // Show a date + time that is easy to read, e.g. "12 Oct, 14:03:21"
+  // Human-readable date time formatting
   const fmtTime = (iso) => new Date(iso).toLocaleString([], {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
 
-  // Safe client-side base64url decode of JWT payload
+  // Client-side JWT Payload Decoder
   function decodeJwt(token) {
     try {
       const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
@@ -32,7 +34,7 @@
     } catch { return null; }
   }
 
-  // Session persistence in sessionStorage
+  // Session Storage Management
   function saveSession(access, refresh, email) {
     state.access = access; state.refresh = refresh; state.email = email; state.user = decodeJwt(access);
     sessionStorage.setItem('sg_acc', access);
@@ -56,36 +58,46 @@
     return false;
   }
 
-  // Core API caller with automatic token refresh
+  // Core API Caller with Automatic 401 Token Refresh
   async function api(path, opts = {}) {
-    const headers = {};
-    if (opts.auth !== false && state.access) headers['Authorization'] = opts.fakeToken || `Bearer ${state.access}`;
-    let body = opts.body;
-    if (body && typeof body === 'object') { headers['Content-Type'] = 'application/json'; body = JSON.stringify(body); }
+    const headers = { ...(opts.headers || {}) };
+    if (opts.body && typeof opts.body === 'object') headers['Content-Type'] = 'application/json';
+    if (opts.auth !== false && state.access) headers.Authorization = `Bearer ${state.access}`;
+    if (opts.fakeToken) headers.Authorization = opts.fakeToken;
 
     const t0 = performance.now();
     let res, data;
     try {
-      res = await fetch(path, { method: opts.method || 'GET', headers, body });
-    } catch {
-      return { status: 0, data: { error: 'Cannot reach the gateway' }, ms: Math.round(performance.now() - t0) };
+      res = await fetch(path, {
+        method: opts.method || 'GET',
+        headers,
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+      });
+      const txt = await res.text();
+      try { data = JSON.parse(txt); } catch { data = { raw: txt }; }
+    } catch (err) {
+      const ms = Math.round(performance.now() - t0);
+      return { status: 0, data: { error: err.message || 'Network unreachable' }, ms, retryAfter: null };
     }
-    const ms = Math.round(performance.now() - t0);
-    const retryAfter = res.headers.get('Retry-After');
-    try { data = await res.json(); } catch { data = { error: res.statusText || 'Parse error' }; }
 
-    // Single in-flight token refresh on 401
-    if (res.status === 401 && state.refresh && !opts._retried && !opts.fakeToken && !path.startsWith('/auth/')) {
+    const ms = Math.round(performance.now() - t0);
+    const retryHeader = res.headers.get('Retry-After');
+    const retryAfter = retryHeader ? Number(retryHeader) : null;
+
+    // Handle 401 token refresh queue
+    if (res.status === 401 && !opts._retried && state.refresh && opts.auth !== false && !opts.fakeToken) {
       if (!refreshPromise) {
         refreshPromise = (async () => {
-          const r = await fetch('/auth/refresh', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refreshToken: state.refresh }),
-          });
-          if (!r.ok) throw new Error('Refresh failed');
-          return r.json();
-        })().finally(() => { refreshPromise = null; });
+          try {
+            const r = await fetch('/auth/refresh', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ refreshToken: state.refresh }),
+            });
+            if (!r.ok) throw new Error('Refresh failed');
+            return await r.json();
+          } finally { refreshPromise = null; }
+        })();
       }
 
       try {
@@ -94,57 +106,356 @@
         return api(path, { ...opts, _retried: true });
       } catch {
         clearSession();
-        render('Session expired. Please log in again.');
+        render('Session expired. Please re-authenticate.');
         return { status: 401, data: { error: 'Session expired' }, ms, retryAfter: null };
       }
     }
     return { status: res.status, data, ms, retryAfter };
   }
 
-  // Health check poller (runs every 15s)
+  // Health Check Poller
   async function checkHealth() {
     const { data } = await api('/health', { auth: false });
     ['db', 'redis'].forEach((k) => {
       const ok = data && data[k] === 'up', pill = el(`${k}-health`);
-      pill.textContent = `${k.toUpperCase()} ${ok ? 'up' : 'down'}`;
+      if (!pill) return;
+      pill.textContent = '';
+      pill.appendChild(mk('span', 'pulse-dot'));
+      pill.appendChild(document.createTextNode(` ${k.toUpperCase()} ${ok ? 'UP' : 'DOWN'}`));
       pill.className = `health-pill ${ok ? 'up' : 'down'}`;
     });
   }
 
-  // Highlight decision in the 6-step pipeline
-  function updatePipeline(status) {
-    for (let i = 1; i <= 6; i++) el(`pipe-live-${i}`).className = 'pipe-step';
-    const pass = (n) => { for (let i = 1; i <= n; i++) el(`pipe-live-${i}`).classList.add('step-pass'); };
-    if (status >= 200 && status < 300) pass(6);
-    else if (status === 429) { pass(1); el('pipe-live-2').classList.add('step-fail'); }
-    else if (status === 401) { pass(2); el('pipe-live-3').classList.add('step-fail'); }
-    else if (status === 403) { pass(3); el('pipe-live-4').classList.add('step-fail'); }
-    else if (status === 502 || status === 504) { pass(4); el('pipe-live-5').classList.add('step-fail'); }
+  // Safe DOM-based JSON Syntax Highlighting (No innerHTML, strictly CSP safe)
+  function renderJsonSyntax(container, obj) {
+    container.textContent = '';
+    if (obj === undefined) { container.textContent = '// No payload'; return; }
+    const str = JSON.stringify(obj, null, 2);
+    if (!str) { container.textContent = String(obj); return; }
+
+    const tokenRegex = /("(?:\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(?:\s*:)?|\btrue\b|\bfalse\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}[\],:])/g;
+    let match, lastIndex = 0;
+
+    while ((match = tokenRegex.exec(str)) !== null) {
+      if (match.index > lastIndex) {
+        container.appendChild(document.createTextNode(str.slice(lastIndex, match.index)));
+      }
+      const tok = match[0];
+      const span = document.createElement('span');
+
+      if (tok.endsWith(':')) {
+        span.className = 'json-tok-key';
+        span.textContent = tok.slice(0, -1);
+        container.appendChild(span);
+        container.appendChild(document.createTextNode(':'));
+      } else if (tok.startsWith('"')) {
+        span.className = 'json-tok-string';
+        span.textContent = tok;
+        container.appendChild(span);
+      } else if (tok === 'true' || tok === 'false') {
+        span.className = 'json-tok-bool';
+        span.textContent = tok;
+        container.appendChild(span);
+      } else if (tok === 'null') {
+        span.className = 'json-tok-null';
+        span.textContent = tok;
+        container.appendChild(span);
+      } else if (/^-?\d/.test(tok)) {
+        span.className = 'json-tok-num';
+        span.textContent = tok;
+        container.appendChild(span);
+      } else {
+        span.className = 'json-tok-punct';
+        span.textContent = tok;
+        container.appendChild(span);
+      }
+      lastIndex = tokenRegex.lastIndex;
+    }
+    if (lastIndex < str.length) {
+      container.appendChild(document.createTextNode(str.slice(lastIndex)));
+    }
   }
 
-  // Display playground response details
-  function showResult(status, data, ms, retry) {
-    el('res-time').textContent = `${ms} ms`;
-    el('res-json').textContent = JSON.stringify(data, null, 2);
-    const b = el('res-badge');
-    const badgeCls = status >= 200 && status < 300 ? 'badge-2xx' : (status === 401 || status === 403 ? 'badge-401' : (status === 429 ? 'badge-429' : 'badge-5xx'));
-    b.className = `status-badge ${badgeCls}`;
-    b.textContent = `${status || 'ERR'} ${status === 200 ? 'OK' : status === 201 ? 'Created' : ''}`.trim();
+  // ========================================================================
+  // Interactive 3D Decision Pipeline Controller
+  // ========================================================================
 
+  const STAGE_CONFIG = [
+    { num: 1, name: 'IP Block', sub: 'Edge blip filter', icon: '🛡️' },
+    { num: 2, name: 'Rate Limit', sub: 'Sliding window Lua', icon: '⏱️' },
+    { num: 3, name: 'JWT Auth', sub: 'Signature & blacklist', icon: '🔑' },
+    { num: 4, name: 'RBAC Check', sub: 'Role permission match', icon: '⚖️' },
+    { num: 5, name: 'Proxying', sub: 'Forward secret header', icon: '🚀' },
+    { num: 6, name: 'Audit Log', sub: 'PostgreSQL async write', icon: '📋' },
+  ];
+
+  function resetPipelineView() {
+    for (let i = 1; i <= 6; i++) {
+      const node = el(`pipe-live-${i}`);
+      if (!node) continue;
+      node.className = 'pipe-step node-3d';
+      const chip = node.querySelector('.node-status-chip');
+      if (chip) { chip.className = 'node-status-chip chip-idle'; chip.textContent = 'Ready'; }
+      const reason = node.querySelector('.node-reason');
+      if (reason) reason.textContent = '';
+    }
+    const pulse = el('pipeline-light-pulse');
+    if (pulse) {
+      pulse.classList.remove('active');
+      pulse.style.transform = 'translate(-50%, -50%)';
+    }
+  }
+
+  // Position pulse over a target stage node (1 to 6)
+  function movePulseToStage(stageNum) {
+    const pulse = el('pipeline-light-pulse');
+    const container = el('live-pipeline');
+    const targetNode = el(`pipe-live-${stageNum}`);
+    if (!pulse || !container || !targetNode) return;
+
+    const contRect = container.getBoundingClientRect();
+    const nodeRect = targetNode.getBoundingClientRect();
+    const xPos = (nodeRect.left + nodeRect.width / 2) - contRect.left;
+
+    pulse.style.transform = `translate(${Math.round(xPos)}px, -50%)`;
+    pulse.classList.add('active');
+  }
+
+  // Determine which pipeline stage rejected or processed the request
+  function resolveTargetStage(status, data) {
+    if (status === 403 && data && data.error && data.error.toLowerCase().includes('ip')) {
+      return { stage: 1, reason: 'IP blocked at edge (403)' };
+    }
+    if (status === 429) {
+      return { stage: 2, reason: 'Quota exceeded (429)' };
+    }
+    if (status === 401) {
+      return { stage: 3, reason: 'Missing / invalid JWT (401)' };
+    }
+    if (status === 403) {
+      return { stage: 4, reason: 'Role permission denied (403)' };
+    }
+    if (status === 502 || status === 504) {
+      return { stage: 5, reason: 'Upstream service down (502)' };
+    }
+    if (status >= 200 && status < 300) {
+      return { stage: 6, reason: 'Verified & logged (200)' };
+    }
+    return { stage: 1, reason: `Error ${status || 'Network'}` };
+  }
+
+  // Animated pipeline execution synchronized with response
+  async function animatePipelineExecution(status, data, animId) {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const { stage: targetStage, reason } = resolveTargetStage(status, data);
+    const isSuccess = status >= 200 && status < 300;
+
+    resetPipelineView();
+
+    if (reducedMotion) {
+      // Instant state without animation
+      for (let i = 1; i <= 6; i++) {
+        const node = el(`pipe-live-${i}`);
+        if (!node) continue;
+        const chip = node.querySelector('.node-status-chip');
+        const reasonEl = node.querySelector('.node-reason');
+
+        if (i < targetStage || (isSuccess && i <= targetStage)) {
+          node.classList.add('step-pass');
+          if (chip) { chip.className = 'node-status-chip'; chip.textContent = '✔ Passed'; }
+        } else if (i === targetStage && !isSuccess) {
+          node.classList.add('step-fail');
+          if (chip) { chip.className = 'node-status-chip'; chip.textContent = '✖ Blocked'; }
+          if (reasonEl) reasonEl.textContent = reason;
+        } else {
+          node.classList.add('step-bypassed');
+          if (chip) { chip.className = 'node-status-chip chip-idle'; chip.textContent = 'Bypassed'; }
+        }
+      }
+      return;
+    }
+
+    // Step-by-step pulse traversal with smooth pacing
+    for (let i = 1; i <= targetStage; i++) {
+      if (activeAnimId !== animId) return; // Cancel if superseded by new request
+
+      movePulseToStage(i);
+      const node = el(`pipe-live-${i}`);
+      if (node) {
+        node.classList.remove('step-pass', 'step-fail', 'step-bypassed');
+        node.classList.add('step-evaluating');
+        const chip = node.querySelector('.node-status-chip');
+        if (chip) { chip.className = 'node-status-chip'; chip.textContent = 'Scanning...'; }
+      }
+
+      await new Promise((r) => setTimeout(r, 110));
+      if (activeAnimId !== animId) return;
+
+      if (i < targetStage) {
+        if (node) {
+          node.classList.remove('step-evaluating');
+          node.classList.add('step-pass');
+          const chip = node.querySelector('.node-status-chip');
+          if (chip) { chip.className = 'node-status-chip'; chip.textContent = '✔ Passed'; }
+        }
+      } else {
+        // Target stage reached
+        if (node) {
+          node.classList.remove('step-evaluating');
+          const chip = node.querySelector('.node-status-chip');
+          const reasonEl = node.querySelector('.node-reason');
+
+          if (isSuccess) {
+            node.classList.add('step-pass');
+            if (chip) { chip.className = 'node-status-chip'; chip.textContent = '✔ Logged'; }
+            if (reasonEl) reasonEl.textContent = 'Audit recorded';
+          } else {
+            node.classList.add('step-fail');
+            if (chip) { chip.className = 'node-status-chip'; chip.textContent = '✖ Blocked'; }
+            if (reasonEl) reasonEl.textContent = reason;
+          }
+        }
+      }
+    }
+
+    // Mark downstream nodes as bypassed
+    if (!isSuccess) {
+      for (let j = targetStage + 1; j <= 6; j++) {
+        const nextNode = el(`pipe-live-${j}`);
+        if (!nextNode) continue;
+        nextNode.classList.add('step-bypassed');
+        const chip = nextNode.querySelector('.node-status-chip');
+        if (chip) { chip.className = 'node-status-chip chip-idle'; chip.textContent = 'Bypassed'; }
+      }
+    }
+  }
+
+  // ========================================================================
+  // Enhanced Response Inspector Console
+  // ========================================================================
+
+  function showResult(method, endpoint, status, data, ms, retry) {
+    lastResponseData = data;
+
+    // Method and endpoint tag
+    const epBadge = el('res-endpoint');
+    if (epBadge) epBadge.textContent = `${method} ${endpoint}`;
+
+    // Request latency tag
+    const timeTag = el('res-time');
+    if (timeTag) timeTag.textContent = `${ms} ms`;
+
+    // Outcome Tag & Status Badge
+    const outcomeTag = el('res-outcome');
+    const badge = el('res-badge');
+    const isSuccess = status >= 200 && status < 300;
+
+    let outcomeText = 'COMPLETED', outcomeCls = 'outcome-ready';
+    let badgeCls = 'badge-idle';
+
+    if (isSuccess) {
+      outcomeText = 'PASSED (VERIFIED)';
+      outcomeCls = 'outcome-success';
+      badgeCls = 'badge-2xx';
+    } else if (status === 401) {
+      outcomeText = 'UNAUTHORIZED';
+      outcomeCls = 'outcome-blocked';
+      badgeCls = 'badge-401';
+    } else if (status === 403) {
+      outcomeText = 'FORBIDDEN';
+      outcomeCls = 'outcome-blocked';
+      badgeCls = 'badge-403';
+    } else if (status === 429) {
+      outcomeText = 'RATE LIMITED';
+      outcomeCls = 'outcome-throttle';
+      badgeCls = 'badge-429';
+    } else if (status >= 500) {
+      outcomeText = 'GATEWAY ERROR';
+      outcomeCls = 'outcome-blocked';
+      badgeCls = 'badge-5xx';
+    }
+
+    if (outcomeTag) {
+      outcomeTag.className = `outcome-tag ${outcomeCls}`;
+      outcomeTag.textContent = outcomeText;
+    }
+
+    if (badge) {
+      const statusTitle = status === 200 ? 'OK' : status === 201 ? 'Created' : status === 401 ? 'Unauthorized' : status === 403 ? 'Forbidden' : status === 429 ? 'Too Many Requests' : status === 502 ? 'Bad Gateway' : 'Result';
+      badge.className = `status-badge ${badgeCls}`;
+      badge.textContent = `${status || 'ERR'} ${statusTitle}`;
+    }
+
+    // Concise Security Explanation Callout
     const msgMap = {
-      401: "I don't know who you are",
-      403: 'I know you, but your role is not allowed',
-      429: retry ? `too many requests (retry in ${retry}s)` : 'too many requests',
-      502: 'the service behind me is down',
-      504: 'the service took too long',
+      200: 'Request authorized and forwarded. Response proxied back from backend microservice and audited.',
+      201: 'Authorized write operation completed on target service. Record created and audited.',
+      401: 'Authentication rejected at Stage 3 (JWT Auth): missing, expired, or revoked bearer token.',
+      403: 'Access denied at Stage 4 (RBAC Check): operator role lacks required permission for this route.',
+      429: retry ? `Throttled at Stage 2 (Rate Limit): sliding window quota exceeded. Retry after ${retry} seconds.` : 'Throttled at Stage 2 (Rate Limit): request rate exceeded.',
+      502: 'Proxy error at Stage 5: target backend service is unreachable or offline.',
+      504: 'Gateway timeout at Stage 5: downstream service did not respond in time.',
     };
-    el('res-explanation').textContent = msgMap[status] || (status >= 200 && status < 300 ? 'Request authorized and succeeded' : 'Request completed');
-    updatePipeline(status);
+    const expEl = el('res-explanation');
+    if (expEl) expEl.textContent = msgMap[status] || (isSuccess ? 'Security checks cleared and request completed successfully.' : 'Request halted by gateway security perimeter.');
+
+    // Retry banner for HTTP 429
+    const retryBanner = el('res-retry-banner');
+    const retryText = el('res-retry-text');
+    if (retryBanner) {
+      if (status === 429 && retry) {
+        retryBanner.classList.remove('hidden');
+        if (retryText) retryText.textContent = `Rate limit in effect. Cooldown window active: ${retry}s remaining before reset.`;
+      } else {
+        retryBanner.classList.add('hidden');
+      }
+    }
+
+    // Syntax Highlighted JSON
+    const jsonPre = el('res-json');
+    if (jsonPre) renderJsonSyntax(jsonPre, data);
+
+    // Trigger Pipeline 3D visualization
+    activeAnimId++;
+    animatePipelineExecution(status, data, activeAnimId);
+
+    // Highlight Role Matrix
+    highlightMatrix(method, endpoint);
   }
 
-  // Highlight active role column in permissions matrix
-  function updateMatrix() {
-    ['viewer', 'analyst', 'admin'].forEach((r) => el(`col-${r}`).classList.toggle('active-role', state.user && state.user.role === r));
+  // ========================================================================
+  // Enhanced Role & Permissions Matrix
+  // ========================================================================
+
+  function updateMatrixColumns() {
+    const userRole = state.user ? state.user.role : 'viewer';
+    ['viewer', 'analyst', 'admin'].forEach((r) => {
+      const col = el(`col-${r}`);
+      if (col) col.classList.toggle('active-role', r === userRole);
+    });
+    const roleLbl = el('matrix-active-role-label');
+    if (roleLbl) roleLbl.textContent = userRole;
+  }
+
+  function highlightMatrix(method, endpoint) {
+    updateMatrixColumns();
+    const routeKey = `${method} ${endpoint}`.trim();
+
+    // Clear active row highlights
+    document.querySelectorAll('#matrix-table tbody tr').forEach((tr) => {
+      tr.classList.remove('active-matrix-row');
+    });
+
+    // Map executed endpoint to matrix row
+    let targetRow = null;
+    if (routeKey.includes('/api/inventory') && method === 'GET') targetRow = el('row-get-inventory');
+    else if (routeKey.includes('/api/inventory') && method === 'POST') targetRow = el('row-post-inventory');
+    else if (routeKey.includes('/api/logs')) targetRow = el('row-get-logs');
+    else if (routeKey.includes('/admin/audit')) targetRow = el('row-get-audit');
+
+    if (targetRow) {
+      targetRow.classList.add('active-matrix-row');
+    }
   }
 
   // Safe text alert box helpers
@@ -162,7 +473,7 @@
       el('user-email-badge').textContent = state.email;
       el('user-role-badge').textContent = state.user.role;
       el('user-role-badge').className = `badge badge-${state.user.role}`;
-      updateMatrix();
+      updateMatrixColumns();
       setTab(currentTab);
       startCountdown();
     } else {
@@ -171,7 +482,7 @@
     }
   }
 
-  // Switch navigation tabs
+  // Switch Navigation Tabs
   function setTab(tab) {
     currentTab = tab;
     ['playground', 'admin', 'session'].forEach((t) => {
@@ -183,10 +494,33 @@
     if (tab === 'session') updateSession();
   }
 
-  // Admin tab rendering & stats computation
+  // Countdown timer for access token expiry
+  function startCountdown() {
+    clearInterval(countTimer);
+    const update = () => {
+      if (!state.user || !state.user.exp) { el('claim-countdown').textContent = '-'; return; }
+      const diff = Math.max(0, state.user.exp - Math.floor(Date.now() / 1000));
+      const m = Math.floor(diff / 60), s = diff % 60;
+      el('claim-countdown').textContent = diff > 0 ? `Expires in ${m}m ${s < 10 ? '0' : ''}${s}s` : 'Token expired';
+    };
+    update();
+    countTimer = setInterval(update, 1000);
+  }
+
+  // Update session tab claims list
+  function updateSession() {
+    if (!state.user) return;
+    el('claim-sub').textContent = state.user.sub || state.user.id || '-';
+    el('claim-role').textContent = state.user.role || '-';
+    el('claim-type').textContent = state.user.type || 'access';
+    el('claim-email').textContent = state.email || '-';
+    el('claim-exp').textContent = state.user.exp ? new Date(state.user.exp * 1000).toLocaleTimeString() : '-';
+  }
+
+  // Admin Tab Controller
   async function loadAdmin() {
-    const role = state.user?.role;
-    const isViewer = role === 'viewer', isAdmin = role === 'admin';
+    const isViewer = state.user && state.user.role === 'viewer';
+    const isAdmin = state.user && state.user.role === 'admin';
     el('admin-locked-notice').classList.toggle('hidden', !isViewer);
     el('admin-content').classList.toggle('hidden', isViewer);
     if (isViewer) return;
@@ -198,26 +532,23 @@
 
   async function loadAuditTrail() {
     const act = el('filter-action').value, st = el('filter-status').value, lim = el('filter-limit').value;
-    const q = new URLSearchParams();
-    if (act) q.set('action', act);
-    if (st) q.set('status', st);
-    if (lim) q.set('limit', lim);
+    const params = new URLSearchParams();
+    if (act) params.set('action', act);
+    if (st) params.set('status', st);
+    if (lim) params.set('limit', lim);
 
-    el('audit-table-status').textContent = 'Loading audit events...';
-    const { status, data } = await api(`/admin/audit?${q}`);
+    const { status, data } = await api(`/admin/audit?${params.toString()}`);
     if (status !== 200 || !Array.isArray(data)) {
-      el('audit-table-status').textContent = data.error || 'Failed to load audit logs';
+      el('audit-table-status').textContent = 'Could not load audit log records.';
       return;
     }
-    el('audit-table-status').textContent = `Displaying ${data.length} event(s).`;
+    el('audit-table-status').textContent = `Displaying ${data.length} audit record(s).`;
+    loadStats();
 
-    loadStats(); // the 4 cards always use the latest 200 events, whatever the filters are
-
-    // Build audit table safely
     const tbody = el('audit-table-body');
-    tbody.replaceChildren();
-    if (!data.length) {
-      const tr = mk('tr'), td = mk('td', null, 'No audit records found.');
+    tbody.textContent = '';
+    if (data.length === 0) {
+      const tr = mk('tr'), td = mk('td', 'text-muted', 'No matching audit records found.');
       td.colSpan = 6; tr.appendChild(td); tbody.appendChild(tr);
       return;
     }
@@ -225,12 +556,18 @@
     data.forEach((r) => {
       const tr = mk('tr'), tdSt = mk('td');
       tdSt.appendChild(mk('span', `badge-status badge-${r.status}`, r.status));
-      [mk('td', null, fmtTime(r.created_at)), mk('td', null, r.user_id ? String(r.user_id) : '—'), mk('td', null, r.ip || '—'), mk('td', null, r.action), tdSt, mk('td', null, r.meta ? JSON.stringify(r.meta) : '')].forEach((c) => tr.appendChild(c));
+      [
+        mk('td', 'font-mono text-cyan', fmtTime(r.created_at)),
+        mk('td', null, r.user_id ? String(r.user_id) : '—'),
+        mk('td', 'font-mono', r.ip || '—'),
+        mk('td', 'font-mono', r.action),
+        tdSt,
+        mk('td', 'text-muted font-mono text-sm', r.meta ? JSON.stringify(r.meta) : '')
+      ].forEach((c) => tr.appendChild(c));
       tbody.appendChild(tr);
     });
   }
 
-  // The 4 stat cards: always the latest 200 events, never filtered
   async function loadStats() {
     const { status, data } = await api('/admin/audit?limit=200');
     if (status !== 200 || !Array.isArray(data)) return;
@@ -241,21 +578,19 @@
     el('stat-auto-blocks').textContent = count((r) => r.action === 'auto_block');
   }
 
-  // Load and manage Blocked IPs
   async function loadBlockedIps() {
     const { status, data } = await api('/admin/ips');
     const tbody = el('blocked-ips-tbody');
-    tbody.replaceChildren();
-    if (status !== 200 || !Array.isArray(data) || !data.length) {
-      const tr = mk('tr'), td = mk('td', null, 'No blocked IPs.');
+    tbody.textContent = '';
+    if (status !== 200 || !Array.isArray(data) || data.length === 0) {
+      const tr = mk('tr'), td = mk('td', 'text-muted', 'No active IP blocks.');
       td.colSpan = 4; tr.appendChild(td); tbody.appendChild(tr);
       return;
     }
 
     data.forEach((item) => {
       const tr = mk('tr'), tdAct = mk('td');
-      const btn = mk('button', 'btn btn-outline btn-sm', 'Unblock');
-      btn.type = 'button';
+      const btn = mk('button', 'btn btn-outline btn-sm cyber-btn-red', 'Unblock');
       btn.addEventListener('click', async () => {
         btn.disabled = true;
         const res = await api(`/admin/ips/${encodeURIComponent(item.ip)}`, { method: 'DELETE' });
@@ -263,139 +598,149 @@
         else { showMsg(el('block-ip-msg'), res.data.error || 'Failed to unblock IP.'); btn.disabled = false; }
       });
       tdAct.appendChild(btn);
-      [mk('td', null, item.ip), mk('td', null, item.reason || 'manual'), mk('td', null, item.created_at ? fmtTime(item.created_at) : '—'), tdAct].forEach((c) => tr.appendChild(c));
+      [
+        mk('td', 'font-mono text-cyan', item.ip),
+        mk('td', null, item.reason || 'manual block'),
+        mk('td', 'font-mono', item.created_at ? fmtTime(item.created_at) : '—'),
+        tdAct
+      ].forEach((c) => tr.appendChild(c));
       tbody.appendChild(tr);
     });
   }
 
-  // Session view and live countdown
-  function updateSession() {
-    if (!state.user) return;
-    el('claim-sub').textContent = state.user.sub || '—';
-    el('claim-role').textContent = state.user.role || '—';
-    el('claim-type').textContent = state.user.type || 'access';
-    el('claim-email').textContent = state.email || '—';
-    el('claim-exp').textContent = state.user.exp ? new Date(state.user.exp * 1000).toLocaleTimeString() : '—';
-    tickCountdown();
-  }
-
-  function tickCountdown() {
-    if (!state.user?.exp) { el('claim-countdown').textContent = '—'; return; }
-    const sec = state.user.exp - Math.floor(Date.now() / 1000), tag = el('claim-countdown');
-    if (sec <= 0) { tag.textContent = 'Expired'; tag.style.color = 'var(--danger)'; }
-    else {
-      const m = Math.floor(sec / 60), s = sec % 60;
-      tag.textContent = `${m}m ${s < 10 ? '0' : ''}${s}s left`;
-      tag.style.color = 'var(--accent)';
-    }
-  }
-
-  function startCountdown() {
-    clearInterval(countTimer);
-    tickCountdown();
-    countTimer = setInterval(tickCountdown, 1000);
-  }
-
-  // Event handlers registration
+  // Setup Event Listeners
   function setupEvents() {
-    // Auth mode toggle
-    const setAuthMode = (m) => {
-      authMode = m;
-      el('auth-tab-login').classList.toggle('active', m === 'login');
-      el('auth-tab-register').classList.toggle('active', m === 'register');
-      el('auth-submit-btn').textContent = m === 'login' ? 'Log In' : 'Register';
+    // Auth Tabs
+    el('auth-tab-login').addEventListener('click', () => {
+      authMode = 'login';
+      el('auth-tab-login').classList.add('active');
+      el('auth-tab-register').classList.remove('active');
+      el('auth-submit-btn').querySelector('.btn-text').textContent = 'Authenticate Session';
       hideMsg(el('auth-msg'));
-    };
-    el('auth-tab-login').addEventListener('click', () => setAuthMode('login'));
-    el('auth-tab-register').addEventListener('click', () => setAuthMode('register'));
-
-    // Password visibility toggle
-    el('show-pw-toggle').addEventListener('change', (e) => { el('auth-password').type = e.target.checked ? 'text' : 'password'; });
-
-    // Auth form submit
-    el('auth-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = el('auth-email').value.trim(), password = el('auth-password').value, btn = el('auth-submit-btn');
-      if (!email || !password) return showMsg(el('auth-msg'), 'Please provide email and password.');
-      if (password.length < 8) return showMsg(el('auth-msg'), 'Password must be at least 8 characters.');
-
-      btn.disabled = true; btn.textContent = 'Please wait...'; hideMsg(el('auth-msg'));
-      try {
-        if (authMode === 'register') {
-          const reg = await api('/auth/register', { method: 'POST', body: { email, password }, auth: false });
-          if (reg.status === 409) return showMsg(el('auth-msg'), 'An account with this email already exists.');
-          if (reg.status !== 201) return showMsg(el('auth-msg'), reg.data.error || 'Registration failed.');
-        }
-
-        const log = await api('/auth/login', { method: 'POST', body: { email, password }, auth: false });
-        if (log.status === 401) showMsg(el('auth-msg'), 'Invalid email or password.');
-        else if (log.status === 429) showMsg(el('auth-msg'), log.data.error || 'Account temporarily locked. Try again in 15 minutes.');
-        else if (log.status === 200 && log.data.access) {
-          saveSession(log.data.access, log.data.refresh, email);
-          el('auth-password').value = ''; render();
-        } else showMsg(el('auth-msg'), log.data.error || 'Login failed.');
-      } finally {
-        btn.disabled = false; btn.textContent = authMode === 'login' ? 'Log In' : 'Register';
-      }
+    });
+    el('auth-tab-register').addEventListener('click', () => {
+      authMode = 'register';
+      el('auth-tab-register').classList.add('active');
+      el('auth-tab-login').classList.remove('active');
+      el('auth-submit-btn').querySelector('.btn-text').textContent = 'Register Operator';
+      hideMsg(el('auth-msg'));
     });
 
-    // Logout actions
+    // Password Visibility Toggle
+    el('show-pw-toggle').addEventListener('change', (e) => {
+      el('auth-password').type = e.target.checked ? 'text' : 'password';
+    });
+
+    // Auth Form Submission
+    el('auth-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = el('auth-email').value.trim(), password = el('auth-password').value;
+      if (!email || !password) { showMsg(el('auth-msg'), 'Please enter both email and password.'); return; }
+
+      const submitBtn = el('auth-submit-btn');
+      submitBtn.disabled = true;
+      hideMsg(el('auth-msg'));
+
+      try {
+        if (authMode === 'register') {
+          const res = await api('/auth/register', { method: 'POST', body: { email, password }, auth: false });
+          if (res.status === 201) {
+            authMode = 'login';
+            el('auth-tab-login').click();
+            showMsg(el('auth-msg'), 'Registration successful. You can now log in.', 'alert-success');
+          } else {
+            showMsg(el('auth-msg'), res.data.error || 'Registration failed.');
+          }
+        } else {
+          const res = await api('/auth/login', { method: 'POST', body: { email, password }, auth: false });
+          if (res.status === 200 && res.data.access && res.data.refresh) {
+            saveSession(res.data.access, res.data.refresh, email);
+            el('auth-password').value = '';
+            render();
+          } else {
+            showMsg(el('auth-msg'), res.data.error || 'Invalid credentials or account locked.');
+          }
+        }
+      } finally { submitBtn.disabled = false; }
+    });
+
+    // Logout
     const doLogout = async () => {
       if (state.access && state.refresh) await api('/auth/logout', { method: 'POST', body: { refreshToken: state.refresh } });
-      clearSession(); currentTab = 'playground'; render('You have logged out.');
+      clearSession(); currentTab = 'playground'; render('Session terminated.');
     };
     [el('header-logout-btn'), el('btn-logout')].forEach((b) => b.addEventListener('click', doLogout));
 
-    // Tab switcher
+    // Nav Switcher
     ['playground', 'admin', 'session'].forEach((t) => el(`nav-${t}`).addEventListener('click', () => setTab(t)));
 
-    // Playground request runners
+    // Playground Route Dispatcher
     const runBtn = async (btn, fn) => { btn.disabled = true; try { await fn(); } finally { btn.disabled = false; } };
 
     [
       ['btn-get-inventory', '/api/inventory', 'GET', null],
-      ['btn-post-inventory', '/api/inventory', 'POST', { item: 'Widget-A', quantity: 10 }],
+      ['btn-post-inventory', '/api/inventory', 'POST', { item: 'Cyber-Sensor-X1', quantity: 15 }],
       ['btn-get-logs', '/api/logs', 'GET', null],
       ['btn-get-audit', '/admin/audit?limit=10', 'GET', null],
     ].forEach(([id, path, method, body]) => {
-      el(id).addEventListener('click', (e) => runBtn(e.target, async () => {
+      el(id).addEventListener('click', (e) => runBtn(e.target.closest('button'), async () => {
         const { status, data, ms, retryAfter } = await api(path, { method, body });
-        showResult(status, data, ms, retryAfter);
+        showResult(method, path, status, data, ms, retryAfter);
       }));
     });
 
-    // Rate-limit demo: keep sending requests until the gateway answers 429 (max 130).
-    // The default limit is 100 requests per minute per IP, so 15 requests could never trigger it.
+    // Rate-limit burst demo (spams until 429)
     el('btn-spam-test').addEventListener('click', async (e) => {
-      const btn = e.target; btn.disabled = true;
+      const btn = e.target.closest('button'); btn.disabled = true;
       const MAX = 130;
       let sent = 0, allowed = 0, retry = null;
       const t0 = performance.now();
-      el('res-explanation').textContent = 'Sending requests until the gateway says 429...';
+      el('res-explanation').textContent = 'Dispatching rapid burst requests to sliding-window counter...';
       try {
         while (sent < MAX) {
           const r = await api('/api/inventory');
           sent++;
           if (r.status === 429) { retry = r.retryAfter; break; }
           if (r.status === 200) allowed++;
-          else { showResult(r.status, r.data, r.ms, r.retryAfter); return; } // some other problem
+          else { showResult('GET', '/api/inventory', r.status, r.data, r.ms, r.retryAfter); return; }
         }
         const ms = Math.round(performance.now() - t0);
         const hit = retry !== null;
-        showResult(hit ? 429 : 200, { sent, allowed_200: allowed, rate_limited_429: hit ? 1 : 0, retry_after_seconds: retry }, ms, retry);
-        el('res-explanation').textContent = hit
-          ? `Rate limit reached after ${allowed} allowed requests. Your IP is blocked for about ${retry || 60}s, so other buttons will show 429 until then.`
-          : `${sent} requests were all allowed: the gateway limit is higher than ${MAX} per minute.`;
+        showResult('BURST', '/api/inventory (x130)', hit ? 429 : 200, {
+          total_burst_sent: sent,
+          allowed_200: allowed,
+          throttled_429: hit ? 1 : 0,
+          retry_after_seconds: retry,
+          policy: '100 req / minute per IP'
+        }, ms, retry);
       } finally { btn.disabled = false; }
     });
 
-    // Broken token demo
-    el('btn-bad-token').addEventListener('click', (e) => runBtn(e.target, async () => {
-      const { status, data, ms, retryAfter } = await api('/api/inventory', { fakeToken: 'Bearer invalid.token.payload' });
-      showResult(status, data, ms, retryAfter);
+    // Invalid Token Test
+    el('btn-bad-token').addEventListener('click', (e) => runBtn(e.target.closest('button'), async () => {
+      const { status, data, ms, retryAfter } = await api('/api/inventory', { fakeToken: 'Bearer eyJhbGciOiJIUzI1NiJ9.invalid.signature' });
+      showResult('FAULT', '/api/inventory', status, data, ms, retryAfter);
     }));
 
-    // Admin filter events
+    // Copy JSON Payload
+    el('btn-copy-json').addEventListener('click', () => {
+      if (!lastResponseData) return;
+      const str = JSON.stringify(lastResponseData, null, 2);
+      navigator.clipboard.writeText(str).then(() => {
+        const txt = el('copy-btn-text');
+        txt.textContent = 'Copied!';
+        setTimeout(() => { txt.textContent = 'Copy JSON'; }, 2000);
+      }).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = str; document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+        document.body.removeChild(ta);
+        const txt = el('copy-btn-text');
+        txt.textContent = 'Copied!';
+        setTimeout(() => { txt.textContent = 'Copy JSON'; }, 2000);
+      });
+    });
+
+    // Admin Filters
     ['filter-action', 'filter-status', 'filter-limit'].forEach((id) => el(id).addEventListener('change', loadAuditTrail));
     el('btn-refresh-audit').addEventListener('click', loadAuditTrail);
     el('auto-refresh-audit').addEventListener('change', (e) => {
@@ -406,13 +751,13 @@
     // Block IP Form
     el('block-ip-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const ip = el('block-ip-input').value.trim(), reason = el('block-reason-input').value.trim() || 'Manual console block';
+      const ip = el('block-ip-input').value.trim(), reason = el('block-reason-input').value.trim() || 'Manual console edge drop';
       if (!ip) return;
       const btn = el('btn-block-ip'); btn.disabled = true; hideMsg(el('block-ip-msg'));
       try {
         const res = await api('/admin/ips/block', { method: 'POST', body: { ip, reason } });
         if (res.status === 201) {
-          showMsg(el('block-ip-msg'), `IP ${ip} blocked successfully.`, 'alert-success');
+          showMsg(el('block-ip-msg'), `Edge drop rule created for ${ip}.`, 'alert-success');
           el('block-ip-input').value = ''; el('block-reason-input').value = '';
           loadBlockedIps(); loadAuditTrail();
         } else showMsg(el('block-ip-msg'), res.data.error || 'Failed to block IP.');
@@ -428,13 +773,13 @@
       try {
         const res = await api(`/admin/users/${encodeURIComponent(userId)}/role`, { method: 'PATCH', body: { role } });
         if (res.status === 200) {
-          showMsg(el('change-role-msg'), `User ${userId} role changed to ${role}.`, 'alert-success');
+          showMsg(el('change-role-msg'), `Operator ${userId} privilege updated to ${role}.`, 'alert-success');
           loadAuditTrail();
         } else showMsg(el('change-role-msg'), res.data.error || 'Failed to update role.');
       } finally { btn.disabled = false; }
     });
 
-    // Manual Refresh Token button on Session tab
+    // Refresh Token in Session tab
     el('btn-refresh-token').addEventListener('click', async () => {
       const btn = el('btn-refresh-token'); btn.disabled = true; hideMsg(el('session-msg'));
       try {
@@ -442,13 +787,13 @@
         if (res.status === 200 && res.data.access) {
           saveSession(res.data.access, res.data.refresh, state.email);
           updateSession(); render();
-          showMsg(el('session-msg'), 'Tokens refreshed and rotated successfully.', 'alert-success');
-        } else showMsg(el('session-msg'), res.data.error || 'Failed to refresh token.');
+          showMsg(el('session-msg'), 'Cryptographic tokens rotated successfully.', 'alert-success');
+        } else showMsg(el('session-msg'), res.data.error || 'Failed to rotate tokens.');
       } finally { btn.disabled = false; }
     });
   }
 
-  // App bootstrap
+  // App Initialization
   function init() {
     setupEvents();
     loadSession();
