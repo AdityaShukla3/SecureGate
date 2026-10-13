@@ -14,5 +14,19 @@ const redis = require('./config/redis');
   }
 
   const port = process.env.PORT || 8080;
-  app.listen(port, () => console.log(`SecureGate listening on ${port}`));
+  const server = app.listen(port, () => console.log(`SecureGate listening on ${port}`));
+
+  const shutdown = (signal) => {
+    console.log(`Received ${signal}. Shutting down gracefully...`);
+    server.close(async () => {
+      try {
+        await redis.quit();
+        await db.end();
+      } catch {}
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 })();
