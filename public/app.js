@@ -5,7 +5,17 @@
   // App Session State
   const state = { access: null, refresh: null, email: null, user: null };
   let refreshPromise = null, auditTimer = null, countTimer = null;
-  let authMode = 'login', currentTab = 'playground';
+
+  // URL Hash & Session Tab Persistence Helper
+  function getInitialTab() {
+    const hash = window.location.hash.replace('#', '').toLowerCase();
+    if (['playground', 'admin', 'session'].includes(hash)) return hash;
+    const saved = sessionStorage.getItem('sg_tab');
+    if (['playground', 'admin', 'session'].includes(saved)) return saved;
+    return 'playground';
+  }
+
+  let authMode = 'login', currentTab = getInitialTab();
   let activeAnimId = 0;
   let lastResponseData = null;
 
@@ -484,10 +494,18 @@
 
   // Switch Navigation Tabs
   function setTab(tab) {
+    if (!['playground', 'admin', 'session'].includes(tab)) tab = 'playground';
     currentTab = tab;
+    sessionStorage.setItem('sg_tab', tab);
+    if (window.location.hash !== `#${tab}`) {
+      history.replaceState(null, '', `#${tab}`);
+    }
+
     ['playground', 'admin', 'session'].forEach((t) => {
-      el(`nav-${t}`).classList.toggle('active', t === tab);
-      el(`panel-${t}`).classList.toggle('hidden', t !== tab);
+      const navBtn = el(`nav-${t}`);
+      const panel = el(`panel-${t}`);
+      if (navBtn) navBtn.classList.toggle('active', t === tab);
+      if (panel) panel.classList.toggle('hidden', t !== tab);
     });
     if (tab === 'admin') loadAdmin();
     else { clearInterval(auditTimer); auditTimer = null; }
@@ -781,12 +799,26 @@
     // Logout
     const doLogout = async () => {
       if (state.access && state.refresh) await api('/auth/logout', { method: 'POST', body: { refreshToken: state.refresh } });
-      clearSession(); currentTab = 'playground'; render('Session terminated.');
+      clearSession();
+      sessionStorage.removeItem('sg_tab');
+      if (window.location.hash) {
+        history.replaceState(null, '', window.location.pathname);
+      }
+      currentTab = 'playground';
+      render('Session terminated.');
     };
     [el('header-logout-btn'), el('btn-logout')].forEach((b) => b.addEventListener('click', doLogout));
 
     // Nav Switcher
     ['playground', 'admin', 'session'].forEach((t) => el(`nav-${t}`).addEventListener('click', () => setTab(t)));
+
+    // Sync tab when URL hash changes (browser back/forward or manual hash)
+    window.addEventListener('hashchange', () => {
+      const tab = window.location.hash.replace('#', '').toLowerCase();
+      if (['playground', 'admin', 'session'].includes(tab) && tab !== currentTab) {
+        setTab(tab);
+      }
+    });
 
     // Playground Route Dispatcher
     const runBtn = async (btn, fn) => { btn.disabled = true; try { await fn(); } finally { btn.disabled = false; } };
