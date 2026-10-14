@@ -20,7 +20,10 @@ app.use('/ui', express.static(path.join(__dirname, '../public')));
 app.get('/', (req, res) => res.redirect('/ui/'));
 
 // Only trust X-Forwarded-For when really behind Nginx/a platform proxy, or clients can fake their IP.
-if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY));
+if (process.env.TRUST_PROXY) {
+  const tp = String(process.env.TRUST_PROXY).trim().toLowerCase();
+  app.set('trust proxy', tp === 'true' ? true : (!isNaN(Number(tp)) ? Number(tp) : tp));
+}
 
 app.use(
   helmet({

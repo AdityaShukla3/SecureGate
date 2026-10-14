@@ -1,8 +1,16 @@
 const app = require('./app');
 const db = require('./config/db');
 const redis = require('./config/redis');
+const initDb = require('./db/init');
 
 (async () => {
+  // Guarantee database schema and seeds are initialized on startup
+  try {
+    await initDb();
+  } catch (err) {
+    console.warn('Initial schema setup notice:', err.message);
+  }
+
   // Rebuild the Redis blocklist from Postgres (the source of truth) on every start.
   try {
     const { rows } = await db.query('SELECT ip FROM blocked_ips');

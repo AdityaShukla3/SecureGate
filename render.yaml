@@ -1,0 +1,39 @@
+services:
+  # SecureGate Public API Gateway Web Service
+  - type: web
+    name: securegate-gateway
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: TRUST_PROXY
+        value: "true"
+      - key: RATE_LIMIT
+        value: "100"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GATEWAY_SECRET
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: securegate-db
+          property: connectionString
+      - key: REDIS_URL
+        sync: false
+        # Provide a free Redis connection string (e.g. from Upstash.com or Render Key-Value)
+      - key: LOGS_URL
+        value: http://127.0.0.1:4001
+      - key: INVENTORY_URL
+        value: http://127.0.0.1:4002
+
+databases:
+  # Free PostgreSQL Database Instance
+  - name: securegate-db
+    plan: free
+    databaseName: securegate
+    user: securegate
