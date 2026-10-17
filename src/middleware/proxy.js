@@ -14,9 +14,13 @@ module.exports = (route) =>
     on: {
       proxyReq: (proxyReq, req) => {
         proxyReq.removeHeader('authorization'); // backend never sees the JWT
-        proxyReq.setHeader('x-user-id', req.user.sub); // overrides anything the client sent
-        proxyReq.setHeader('x-user-role', req.user.role);
-        proxyReq.setHeader('x-gateway-secret', process.env.GATEWAY_SECRET);
+        if (req.user) {
+          proxyReq.setHeader('x-user-id', String(req.user.sub ?? ''));
+          proxyReq.setHeader('x-user-role', String(req.user.role ?? ''));
+        }
+        if (process.env.GATEWAY_SECRET) {
+          proxyReq.setHeader('x-gateway-secret', String(process.env.GATEWAY_SECRET));
+        }
       },
       error: (err, req, res) => {
         if (!res.writeHead || res.headersSent) return;

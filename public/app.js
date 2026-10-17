@@ -777,11 +777,20 @@
         if (authMode === 'register') {
           const res = await api('/auth/register', { method: 'POST', body: { email, password }, auth: false });
           if (res.status === 201) {
+            // Auto login after registration for seamless UX
+            const loginRes = await api('/auth/login', { method: 'POST', body: { email, password }, auth: false });
+            if (loginRes.status === 200 && loginRes.data.access && loginRes.data.refresh) {
+              saveSession(loginRes.data.access, loginRes.data.refresh, email);
+              el('auth-password').value = '';
+              render('Registration successful! Welcome to SecureGate.');
+              return;
+            }
             authMode = 'login';
             el('auth-tab-login').click();
             showMsg(el('auth-msg'), 'Registration successful. You can now log in.', 'alert-success');
           } else {
-            showMsg(el('auth-msg'), res.data.error || 'Registration failed.');
+            const errDetail = res.data?.details && res.data.details.map((d) => d.message).join(', ');
+            showMsg(el('auth-msg'), errDetail || res.data?.error || 'Registration failed.');
           }
         } else {
           const res = await api('/auth/login', { method: 'POST', body: { email, password }, auth: false });
@@ -790,7 +799,8 @@
             el('auth-password').value = '';
             render();
           } else {
-            showMsg(el('auth-msg'), res.data.error || 'Invalid credentials or account locked.');
+            const errDetail = res.data?.details && res.data.details.map((d) => d.message).join(', ');
+            showMsg(el('auth-msg'), errDetail || res.data?.error || 'Invalid credentials or account locked.');
           }
         }
       } finally { submitBtn.disabled = false; }

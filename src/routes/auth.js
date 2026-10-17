@@ -10,7 +10,10 @@ const auth = require('../middleware/auth');
 const { issuePair } = require('../services/tokens');
 
 const googleClient = new OAuth2Client();
-const creds = z.object({ email: z.string().email(), password: z.string().min(8) });
+const creds = z.object({
+  email: z.string().trim().toLowerCase().email('Please enter a valid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters long'),
+});
 
 router.get('/config', (req, res) => {
   res.json({
@@ -76,11 +79,24 @@ router.post('/google', async (req, res) => {
 router.post('/register', async (req, res) => {
   const { email, password } = creds.parse(req.body);
   const hash = await bcrypt.hash(password, 10);
-  const { rows } = await db.query(
+  let { rows } = await db.query(
     `INSERT INTO users(email, password_hash, role_id)
      SELECT $1, $2, id FROM roles WHERE name='viewer' RETURNING id`,
     [email, hash]
   );
+  if (!rows || rows.length === 0) {
+    let roleRes = await db.query(`SELECT id FROM roles WHERE name='viewer'`);
+    let roleId = roleRes.rows[0]?.id;
+    if (!roleId) {
+      const createdRole = await db.query(`INSERT INTO roles(name) VALUES('viewer') RETURNING id`);
+      roleId = createdRole.rows[0].id;
+    }
+    const inserted = await db.query(
+      `INSERT INTO users(email, password_hash, role_id) VALUES($1, $2, $3) RETURNING id`,
+      [email, hash, roleId]
+    );
+    rows = inserted.rows;
+  }
   audit({ userId: rows[0].id, ip: req.ip, action: 'register', status: 'success' });
   res.status(201).json({ id: rows[0].id, email, role: 'viewer' });
 });
